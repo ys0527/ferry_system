@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_stripe/flutter_stripe.dart';
+import 'home.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  Stripe.publishableKey = 'pk_test_51TwayUKyvqb9xJlKM1qZlkpz1VTNASSJ649H0090fSYngnIDp7T99JdTHiLRk3cb7VuS7RuyCdrHpK9kOybEPjig006HJ3M5O4';
   runApp(const MyApp());
 }
 
@@ -16,7 +20,7 @@ class MyApp extends StatelessWidget {
 
         colorScheme: .fromSeed(seedColor: Colors.deepPurple),
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const HomePage(),
     );
   }
 }
