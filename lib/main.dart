@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'home.dart';
 
+const String supabaseUrl = 'https://nprcxfvipxnjaecufhcz.supabase.co';
+const String supabaseKey = 'sb_secret_QOYG1HmTZDSkm6ANOD1_fw_x2l2J6LG';
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   Stripe.publishableKey = 'pk_test_51TwayUKyvqb9xJlKM1qZlkpz1VTNASSJ649H0090fSYngnIDp7T99JdTHiLRk3cb7VuS7RuyCdrHpK9kOybEPjig006HJ3M5O4';
