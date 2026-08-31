@@ -43,7 +43,7 @@ class _HomeState extends State<HomePage> {
   Future<void> loadHomeData() async {
     await Future.delayed(const Duration(milliseconds: 400));
     setState(() {
-      userName = 'Sin Wai Yan';
+      userName = 'Sin Wai';
       weatherCondition = 'Partly Cloudy, 29°C';
       weatherNote = 'Sailing as scheduled';
       nextFerryDestination = 'Butterworth';
