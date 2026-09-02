@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'ferry_schedule.dart';
 import 'qr_ticket.dart';
 import 'account.dart';
@@ -41,16 +42,50 @@ class _HomeState extends State<HomePage> {
   }
 
   Future<void> loadHomeData() async {
-    await Future.delayed(const Duration(milliseconds: 400));
-    setState(() {
-      userName = 'Sin Wai';
-      weatherCondition = 'Partly Cloudy, 29°C';
-      weatherNote = 'Sailing as scheduled';
-      nextFerryDestination = 'Butterworth';
-      nextFerryTime = '08:20';
-      nextFerryMinutesAway = 12;
-      isLoading = false;
-    });
+    try {
+      final authUser = Supabase.instance.client.auth.currentUser;
+
+      if (authUser == null) {
+        throw Exception('No user is currently logged in');
+      }
+
+      final userData = await Supabase.instance.client
+          .from('users')
+          .select('name')
+          .eq('auth_id', authUser.id)
+          .maybeSingle();
+
+      if (!mounted) return;
+
+      setState(() {
+        userName = userData?['name'] ?? 'User';
+        weatherCondition = 'Partly Cloudy, 29°C';
+        weatherNote = 'Sailing as scheduled';
+        nextFerryDestination = 'Butterworth';
+        nextFerryTime = '08:20';
+        nextFerryMinutesAway = 12;
+        isLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        userName = 'User';
+        weatherCondition = 'Partly Cloudy, 29°C';
+        weatherNote = 'Sailing as scheduled';
+        nextFerryDestination = 'Butterworth';
+        nextFerryTime = '08:20';
+        nextFerryMinutesAway = 12;
+        isLoading = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to load user name: $error'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
   }
 
   void _showWeatherDetail() {
@@ -146,7 +181,11 @@ class _HomeState extends State<HomePage> {
             Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => destination!),
-            ).then((_) => setState(() => bottomNavIndex = 0));
+            ).then((_) {
+              if (!mounted) return;
+              setState(() => bottomNavIndex = 0);
+              loadHomeData();
+            });
           }
         },
         items: const [

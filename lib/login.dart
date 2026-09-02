@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'register.dart';
 import 'home.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'complete_profile.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -29,19 +31,100 @@ class _LoginState extends State<LoginPage> {
     super.dispose();
   }
 
+  //
   Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isSubmitting = true);
-    await Future.delayed(const Duration(milliseconds: 600));
-    if (!mounted) return;
-    setState(() => _isSubmitting = false);
 
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const HomePage()),
-    );
+    try {
+      final response = await Supabase.instance.client.auth.signInWithPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
+
+      final authUser = response.user;
+
+      if (authUser == null) {
+        throw Exception('Login failed: user information was not returned');
+      }
+
+      final profile = await Supabase.instance.client
+          .from('users')
+          .select('user_id')
+          .eq('auth_id', authUser.id)
+          .maybeSingle();
+
+      if (!mounted) return;
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (_) => profile == null
+              ? const CompleteProfilePage()
+              : const HomePage(),
+        ),
+            (route) => false,
+      );
+    } on AuthException catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.message),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to log in. Please try again.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
   }
+
+  //Forgot Password Function
+  Future<void> _handleForgotPassword() async {
+    final email = _emailController.text.trim();
+
+    if (email.isEmpty || !email.contains('@')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter your email first')),
+      );
+      return;
+    }
+
+    try {
+      await Supabase.instance.client.auth.resetPasswordForEmail(email);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Password reset instructions sent to your email'),
+          backgroundColor: teal,
+        ),
+      );
+    } on AuthException catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.message),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -103,9 +186,10 @@ class _LoginState extends State<LoginPage> {
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
-                          onPressed: () {
-                          },
-                          child: const Text('Forgot Password?', style: TextStyle(color: teal, fontSize: 12)),
+                          onPressed: _handleForgotPassword,
+                          child: const Text(
+                              'Forgot Password?',
+                              style: TextStyle(color: teal, fontSize: 12)),
                         ),
                       ),
                       const SizedBox(height: 8),
