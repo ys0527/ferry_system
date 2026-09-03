@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'booking_detail.dart';
-import 'constants.dart';
 import 'models/booking_history_entry.dart';
 import 'reviews_ratings.dart';
 import 'services/booking_service.dart';
+import 'services/current_user_service.dart';
 
 class ActivityPage extends StatefulWidget {
   const ActivityPage({super.key});
@@ -37,7 +37,8 @@ class _ActivityState extends State<ActivityPage> {
       _error = null;
     });
     try {
-      final entries = await _bookingService.fetchBookingHistory(demoUserId);
+      final userId = await currentUserId();
+      final entries = await _bookingService.fetchBookingHistory(userId);
       final upcoming = entries.where((e) => !e.isPast).toList()
         ..sort((a, b) => a.sailingAt.compareTo(b.sailingAt));
       final past = entries.where((e) => e.isPast).toList()

@@ -1,11 +1,10 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
-
 import '../constants.dart';
 import '../models/ferry.dart';
 import '../models/schedule.dart';
+import '../supabase_config.dart';
 
 class ScheduleService {
-  final _client = Supabase.instance.client;
+  final _client = supabase;
 
   Future<Ferry> fetchFerry(String ferryId) async {
     final row = await _client
@@ -16,44 +15,27 @@ class ScheduleService {
     return Ferry.fromMap(row);
   }
 
-  Future<ScheduleSlot> findOrCreateSchedule({
+  Future<List<ScheduleSlot>> fetchSchedules({
     required String departure,
     required String destination,
     required DateTime date,
-    required String time,
     required String ferryId,
   }) async {
     final dateStr =
         '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
-    final existing = await _client
+    final rows = await _client
         .from('schedule')
         .select()
         .eq('departure', departure)
         .eq('destination', destination)
         .eq('date', dateStr)
-        .eq('time', time)
         .eq('ferry_id', ferryId)
-        .maybeSingle();
+        .order('time');
 
-    if (existing != null) {
-      return ScheduleSlot.fromMap(existing);
-    }
-
-    final created = await _client
-        .from('schedule')
-        .insert({
-          'departure': departure,
-          'destination': destination,
-          'date': dateStr,
-          'time': time,
-          'delay_time': 0,
-          'ferry_id': ferryId,
-        })
-        .select()
-        .single();
-
-    return ScheduleSlot.fromMap(created);
+    return (rows as List)
+        .map((row) => ScheduleSlot.fromMap(row as Map<String, dynamic>))
+        .toList();
   }
 
   Future<Map<String, int>> fetchBookedCounts(String scheduleId) async {

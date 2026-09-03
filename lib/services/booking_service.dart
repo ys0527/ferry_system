@@ -1,11 +1,11 @@
 import 'dart:math';
 
-import 'package:supabase_flutter/supabase_flutter.dart';
-
 import '../constants.dart';
 import '../models/booking_detail.dart';
 import '../models/booking_history_entry.dart';
 import '../models/qr_ticket_data.dart';
+import '../supabase_config.dart';
+import 'current_user_service.dart';
 import 'schedule_service.dart';
 
 String _generateReference(DateTime now) {
@@ -30,7 +30,7 @@ class BookingCapacityException implements Exception {
 }
 
 class BookingService {
-  final _client = Supabase.instance.client;
+  final _client = supabase;
   final _scheduleService = ScheduleService();
 
   Future<String> createPendingBooking({
@@ -56,13 +56,15 @@ class BookingService {
       }
     }
 
+    final userId = await currentUserId();
+
     final bookingRow = await _client
         .from('booking')
         .insert({
           'reference': _generateReference(DateTime.now()),
           'status': 'Pending',
           'total': fare,
-          'user_id': demoUserId,
+          'user_id': userId,
           'schedule_id': scheduleId,
         })
         .select()

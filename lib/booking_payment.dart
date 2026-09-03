@@ -40,14 +40,12 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
   late DateTime selectedDate = widget.initialDate ?? availableDates.first;
 
   late String selectedTime = widget.initialTime ?? '08:20';
-  final List<String> timeSlots =
-      const ['07:50', '08:20', '08:50', '09:20', '09:50', '10:20'];
 
-  final List<Map<String, dynamic>> ticketTypes = const [
-    {'key': 'adult', 'label': 'Adult', 'icon': Icons.person, 'price': 2.50},
-    {'key': 'child', 'label': 'Child', 'icon': Icons.child_care, 'price': 2.00},
-    {'key': 'bicycle', 'label': 'Bicycle', 'icon': Icons.pedal_bike, 'price': 2.00},
-    {'key': 'motorcycle', 'label': 'Motorcycle', 'icon': Icons.two_wheeler, 'price': 3.00},
+  final List<Map<String, dynamic>> ticketTypes = [
+    {'key': 'adult', 'label': 'Adult', 'icon': Icons.person, 'price': ticketTypePrices['adult']!},
+    {'key': 'child', 'label': 'Child', 'icon': Icons.child_care, 'price': ticketTypePrices['child']!},
+    {'key': 'bicycle', 'label': 'Bicycle', 'icon': Icons.pedal_bike, 'price': ticketTypePrices['bicycle']!},
+    {'key': 'motorcycle', 'label': 'Motorcycle', 'icon': Icons.two_wheeler, 'price': ticketTypePrices['motorcycle']!},
   ];
 
   final Map<String, int> counts = {'adult': 1, 'child': 0, 'bicycle': 0, 'motorcycle': 0};
@@ -55,6 +53,7 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
   bool _loadingSlot = true;
   bool _confirming = false;
   String? _slotError;
+  List<ScheduleSlot> _availableSlots = const [];
   ScheduleSlot? _schedule;
   Ferry? _ferry;
   Map<String, int> _booked = {};
@@ -75,21 +74,37 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
     setState(() {
       _loadingSlot = true;
       _slotError = null;
+      _schedule = null;
+      _booked = {};
     });
     try {
       final parts = _departureDestination;
-      final schedule = await _scheduleService.findOrCreateSchedule(
+      final slots = await _scheduleService.fetchSchedules(
         departure: parts[0],
         destination: parts[1],
         date: selectedDate,
-        time: selectedTime,
         ferryId: defaultFerryId,
       );
       final ferry = await _scheduleService.fetchFerry(defaultFerryId);
-      final booked = await _scheduleService.fetchBookedCounts(schedule.scheduleId);
+
+      ScheduleSlot? chosen;
+      for (final slot in slots) {
+        if (slot.time.startsWith(selectedTime)) {
+          chosen = slot;
+          break;
+        }
+      }
+      chosen ??= slots.isEmpty ? null : slots.first;
+
+      final booked = chosen == null
+          ? <String, int>{}
+          : await _scheduleService.fetchBookedCounts(chosen.scheduleId);
+
       if (!mounted) return;
       setState(() {
-        _schedule = schedule;
+        _availableSlots = slots;
+        _schedule = chosen;
+        if (chosen != null) selectedTime = chosen.time.substring(0, 5);
         _ferry = ferry;
         _booked = booked;
         _loadingSlot = false;
@@ -97,9 +112,25 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _slotError = 'Could not load this sailing: $e';
+        _slotError = 'Could not load sailings for this day: $e';
         _loadingSlot = false;
       });
+    }
+  }
+
+  Future<void> _selectSlot(ScheduleSlot slot) async {
+    if (slot.scheduleId == _schedule?.scheduleId) return;
+    setState(() {
+      _schedule = slot;
+      selectedTime = slot.time.substring(0, 5);
+    });
+    try {
+      final booked = await _scheduleService.fetchBookedCounts(slot.scheduleId);
+      if (!mounted) return;
+      setState(() => _booked = booked);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _slotError = 'Could not load crowd data: $e');
     }
   }
 
@@ -193,6 +224,11 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 8),
               child: Center(child: CircularProgressIndicator()),
+            )
+          else if (_schedule == null)
+            const Text(
+              'Pick a sailing above to see crowd levels.',
+              style: TextStyle(color: Colors.black54, fontSize: 12),
             )
           else ...[
             ...ticketTypes.map(_buildCrowdBar),
@@ -319,16 +355,26 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
   }
 
   Widget _buildTimeSlotPicker() {
+    if (_loadingSlot) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_availableSlots.isEmpty) {
+      return const Text(
+        'No sailings open for booking on this day yet.',
+        style: TextStyle(color: Colors.black54, fontSize: 12),
+      );
+    }
     return Wrap(
       spacing: 10,
       runSpacing: 10,
-      children: timeSlots.map((time) {
-        final selected = time == selectedTime;
+      children: _availableSlots.map((slot) {
+        final label = slot.time.substring(0, 5);
+        final selected = slot.scheduleId == _schedule?.scheduleId;
         return GestureDetector(
-          onTap: () {
-            setState(() => selectedTime = time);
-            _loadSlot();
-          },
+          onTap: () => _selectSlot(slot),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
@@ -336,7 +382,7 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
-              time,
+              label,
               style: TextStyle(
                 color: selected ? Colors.white : navy,
                 fontWeight: FontWeight.bold,

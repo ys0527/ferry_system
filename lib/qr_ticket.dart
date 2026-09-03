@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'constants.dart';
 import 'models/qr_ticket_data.dart';
 import 'services/booking_service.dart';
+import 'services/current_user_service.dart';
 import 'widgets/ticket_qr_card.dart';
 
 class QrTicketPage extends StatefulWidget {
@@ -37,7 +37,8 @@ class _QrTicketPageState extends State<QrTicketPage> {
   Future<void> _loadLatestTicket() async {
     setState(() => _loading = true);
     try {
-      final data = await _bookingService.fetchLatestConfirmedTicket(demoUserId);
+      final userId = await currentUserId();
+      final data = await _bookingService.fetchLatestConfirmedTicket(userId);
       if (!mounted) return;
       setState(() {
         _data = data;
