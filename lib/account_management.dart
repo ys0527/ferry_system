@@ -1,8 +1,11 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'login.dart';
 
 class AccountManagementPage extends StatefulWidget {
   const AccountManagementPage({super.key});
@@ -20,9 +23,11 @@ class _AccountManagementState extends State<AccountManagementPage> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _dateOfBirthController = TextEditingController();
   final _imagePicker = ImagePicker();
 
   String? _selectedGender;
+  DateTime? _selectedDateOfBirth;
   String? _profileUrl;
   Uint8List? _newImageBytes;
   String? _newImageExtension;
@@ -31,6 +36,7 @@ class _AccountManagementState extends State<AccountManagementPage> {
   String _originalEmail = '';
   String _originalPhone = '';
   String? _originalGender;
+  DateTime? _originalDateOfBirth;
 
   bool _isLoading = true;
   bool _isSaving = false;
@@ -48,6 +54,7 @@ class _AccountManagementState extends State<AccountManagementPage> {
     _nameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
+    _dateOfBirthController.dispose();
     super.dispose();
   }
 
@@ -58,7 +65,7 @@ class _AccountManagementState extends State<AccountManagementPage> {
 
       final userData = await Supabase.instance.client
           .from('users')
-          .select('name, email, phone_num, gender, profile')
+          .select('name, email, phone_num, gender, profile, date_of_birth')
           .eq('auth_id', authUser.id)
           .maybeSingle();
 
@@ -80,6 +87,12 @@ class _AccountManagementState extends State<AccountManagementPage> {
         _emailController.text = authenticatedEmail;
         _phoneController.text = userData['phone_num'] ?? '';
         _selectedGender = userData['gender'];
+        _selectedDateOfBirth = userData['date_of_birth'] == null
+            ? null
+            : DateTime.tryParse(userData['date_of_birth'].toString());
+        _dateOfBirthController.text = _selectedDateOfBirth == null
+            ? ''
+            : _formatDate(_selectedDateOfBirth!);
         _profileUrl = userData['profile'];
         _isEmailVerified = authUser.emailConfirmedAt != null;
         _rememberOriginalValues();
@@ -97,6 +110,7 @@ class _AccountManagementState extends State<AccountManagementPage> {
     _originalEmail = _emailController.text;
     _originalPhone = _phoneController.text;
     _originalGender = _selectedGender;
+    _originalDateOfBirth = _selectedDateOfBirth;
   }
 
   void _cancelEditing() {
@@ -105,9 +119,35 @@ class _AccountManagementState extends State<AccountManagementPage> {
       _emailController.text = _originalEmail;
       _phoneController.text = _originalPhone;
       _selectedGender = _originalGender;
+      _selectedDateOfBirth = _originalDateOfBirth;
+      _dateOfBirthController.text = _originalDateOfBirth == null
+          ? ''
+          : _formatDate(_originalDateOfBirth!);
       _newImageBytes = null;
       _newImageExtension = null;
       _isEditing = false;
+    });
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}/'
+        '${date.month.toString().padLeft(2, '0')}/${date.year}';
+  }
+
+  Future<void> _pickDateOfBirth() async {
+    if (!_isEditing) return;
+    final now = DateTime.now();
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: _selectedDateOfBirth ?? DateTime(now.year - 18),
+      firstDate: DateTime(1900),
+      lastDate: DateTime(now.year, now.month, now.day),
+    );
+
+    if (selected == null || !mounted) return;
+    setState(() {
+      _selectedDateOfBirth = selected;
+      _dateOfBirthController.text = _formatDate(selected);
     });
   }
 
@@ -189,8 +229,10 @@ class _AccountManagementState extends State<AccountManagementPage> {
             'name': newName,
             'phone_num': newPhone,
             'gender': _selectedGender,
+            'date_of_birth': _selectedDateOfBirth?.toIso8601String().split('T').first,
           },
         ),
+        //emailRedirectTo: '${Uri.base.origin}/?emailChanged=true',
       );
 
       // While email confirmation is pending, this remains the old email.
@@ -199,9 +241,10 @@ class _AccountManagementState extends State<AccountManagementPage> {
 
       await Supabase.instance.client.from('users').update({
         'name': newName,
-        'email': confirmedEmail,
+        //'email': confirmedEmail,
         'phone_num': newPhone,
         'gender': _selectedGender,
+        'date_of_birth': _selectedDateOfBirth?.toIso8601String().split('T').first,
         'profile': newProfileUrl,
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('auth_id', authUser.id);
@@ -210,8 +253,9 @@ class _AccountManagementState extends State<AccountManagementPage> {
       setState(() {
         _profileUrl = newProfileUrl;
         _nameController.text = newName;
-        _emailController.text = confirmedEmail ?? newEmail;
+        _emailController.text = emailChanged ? newEmail : (confirmedEmail ?? newEmail);
         _phoneController.text = newPhone;
+        if (emailChanged) _isEmailVerified = false;
         _newImageBytes = null;
         _newImageExtension = null;
         _isEditing = false;
@@ -233,6 +277,176 @@ class _AccountManagementState extends State<AccountManagementPage> {
       _showMessage(error.message, isError: true);
     } catch (error) {
       _showMessage('Unable to update profile: $error', isError: true);
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _changePassword() async {
+    final formKey = GlobalKey<FormState>();
+    final currentPasswordController = TextEditingController();
+    final newPasswordController = TextEditingController();
+    final confirmPasswordController = TextEditingController();
+
+    final shouldChange = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Change Password'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: currentPasswordController,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'Current password'),
+                validator: (value) => value == null || value.isEmpty
+                    ? 'Current password is required'
+                    : null,
+              ),
+              TextFormField(
+                controller: newPasswordController,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'New password'),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'New password is required';
+                  }
+                  if (value.length < 8) return 'Use at least 8 characters';
+                  if (!RegExp(r'[A-Z]').hasMatch(value) ||
+                      !RegExp(r'[a-z]').hasMatch(value) ||
+                      !RegExp(r'\d').hasMatch(value)) {
+                    return 'Include upper, lower, and number';
+                  }
+                  return null;
+                },
+              ),
+              TextFormField(
+                controller: confirmPasswordController,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'Confirm password'),
+                validator: (value) => value != newPasswordController.text
+                    ? 'Passwords do not match'
+                    : null,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (formKey.currentState?.validate() ?? false) {
+                Navigator.pop(dialogContext, true);
+              }
+            },
+            child: const Text('Change'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldChange != true) {
+      //currentPasswordController.dispose();
+      //newPasswordController.dispose();
+      //confirmPasswordController.dispose();
+      return;
+    }
+
+    final currentPassword = currentPasswordController.text;
+    final newPassword = newPasswordController.text;
+    //currentPasswordController.dispose();
+    //newPasswordController.dispose();
+    //confirmPasswordController.dispose();
+
+    final authUser = Supabase.instance.client.auth.currentUser;
+    final currentEmail = authUser?.email;
+    if (authUser == null || currentEmail == null) {
+      _showMessage('No email account is currently logged in', isError: true);
+      return;
+    }
+
+    setState(() => _isSaving = true);
+    try {
+      await Supabase.instance.client.auth.signInWithPassword(
+        email: currentEmail,
+        password: currentPassword,
+      );
+      await Supabase.instance.client.auth.updateUser(
+        UserAttributes(password: newPassword),
+      );
+      _showMessage('Password changed successfully');
+    } on AuthException catch (error) {
+      _showMessage(error.message, isError: true);
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _deleteAccount() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete Account'),
+        content: const Text(
+          'This permanently deletes your account and cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    setState(() => _isSaving = true);
+
+    try {
+      final authUser = Supabase.instance.client.auth.currentUser;
+      if (authUser == null) throw Exception('No user is currently logged in');
+
+      final profileFiles = await Supabase.instance.client.storage
+          .from('profile-pictures')
+          .list(path: authUser.id);
+      if (profileFiles.isNotEmpty) {
+        await Supabase.instance.client.storage
+            .from('profile-pictures')
+            .remove(
+          profileFiles
+              .map((file) => '${authUser.id}/${file.name}')
+              .toList(),
+        );
+      }
+
+      await Supabase.instance.client.rpc('delete_own_account');
+      try {
+        await Supabase.instance.client.auth.signOut();
+      } catch (_) {}
+
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+            (route) => false,
+      );
+    } on PostgrestException catch (error) {
+      _showMessage(error.message, isError: true);
+    } catch (error) {
+      _showMessage('Unable to delete account: $error', isError: true);
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -372,12 +586,16 @@ class _AccountManagementState extends State<AccountManagementPage> {
                   controller: _phoneController,
                   enabled: _isEditing,
                   keyboardType: TextInputType.phone,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(11),
+                  ],
                   decoration: _fieldDecoration(Icons.phone_outlined),
                   validator: (value) {
                     final phone = value?.trim() ?? '';
                     if (phone.isEmpty) return 'Phone number is required';
-                    return phone.length > 11
-                        ? 'Phone number cannot exceed 11 characters'
+                    return !RegExp(r'^01\d{8,9}$').hasMatch(phone)
+                        ? 'Enter a valid Malaysian phone number'
                         : null;
                   },
                 ),
@@ -395,6 +613,21 @@ class _AccountManagementState extends State<AccountManagementPage> {
                       : (value) => setState(() => _selectedGender = value),
                   validator: (value) =>
                   value == null ? 'Gender is required' : null,
+                ),
+                const SizedBox(height: 16),
+                _buildLabel('Date of Birth'),
+                TextFormField(
+                  controller: _dateOfBirthController,
+                  enabled: _isEditing,
+                  readOnly: true,
+                  onTap: _isEditing ? _pickDateOfBirth : null,
+                  decoration: _fieldDecoration(
+                    Icons.cake_outlined,
+                    suffix: const Icon(Icons.calendar_month_outlined),
+                  ),
+                  validator: (_) => _selectedDateOfBirth == null
+                      ? 'Date of birth is required'
+                      : null,
                 ),
                 if (_isEditing) ...[
                   const SizedBox(height: 24),
@@ -431,6 +664,24 @@ class _AccountManagementState extends State<AccountManagementPage> {
                 ],
               ],
             ),
+          ),
+          const SizedBox(height: 28),
+          const Divider(),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _isSaving || _isEditing ? null : _changePassword,
+            icon: const Icon(Icons.lock_reset_outlined),
+            label: const Text('Change Password'),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: _isSaving || _isEditing ? null : _deleteAccount,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.red,
+              side: const BorderSide(color: Colors.red),
+            ),
+            icon: const Icon(Icons.delete_forever_outlined),
+            label: const Text('Delete Account'),
           ),
         ],
       ),

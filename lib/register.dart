@@ -43,6 +43,7 @@ class _RegisterState extends State<RegisterPage> {
       final response = await Supabase.instance.client.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
+        //emailRedirectTo: '${Uri.base.origin}/?confirmed=true',
       );
 
       if (response.user == null) {

@@ -133,6 +133,75 @@ class _AccountPageState extends State<AccountPage> {
     );
   }
 
+  Future<void> _showHelpSupport() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Help & Support',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: navy,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const ExpansionTile(
+                  title: Text('Where can I find my ticket?'),
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text(
+                        'Open Activity and select your booking to view its QR ticket.',
+                      ),
+                    ),
+                  ],
+                ),
+                const ExpansionTile(
+                  title: Text('What if my payment is unsuccessful?'),
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text(
+                        'Check your payment status before trying again to avoid duplicate payment.',
+                      ),
+                    ),
+                  ],
+                ),
+                const ExpansionTile(
+                  title: Text('How do I change my account information?'),
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text(
+                        'Open Account & Security, select Edit Profile, then save your changes.',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: () => Navigator.pop(sheetContext),
+                  child: const Text('Close'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _handleMenuTap(String label) async {
     switch (label) {
       case 'Account & Security':
@@ -149,13 +218,7 @@ class _AccountPageState extends State<AccountPage> {
         break;
 
       case 'Help & Support':
-        if (!mounted) return;
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Help & Support is coming soon'),
-          ),
-        );
+        await _showHelpSupport();
         break;
 
       case 'Logout':

@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -24,7 +25,6 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
   final _imagePicker = ImagePicker();
 
   String? _selectedGender;
-  String _selectedLanguage = 'EN';
   Uint8List? _profileImageBytes;
   String? _profileImageExtension;
   bool _isSaving = false;
@@ -115,7 +115,6 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
         'gender': _selectedGender,
         'email': authUser.email,
         'phone_num': _phoneController.text.trim(),
-        'language': _selectedLanguage,
         'profile': profileUrl,
       });
 
@@ -252,6 +251,10 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
                       TextFormField(
                         controller: _phoneController,
                         keyboardType: TextInputType.phone,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(11),
+                        ],
                         decoration: _fieldDecoration(
                           hint: '01XXXXXXXXX',
                           icon: Icons.phone_outlined,
@@ -259,33 +262,10 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
                         validator: (value) {
                           final phone = value?.trim() ?? '';
                           if (phone.isEmpty) return 'Phone number is required';
-                          if (phone.length > 11) {
-                            return 'Phone number cannot exceed 11 characters';
+                          if (!RegExp(r'^01\d{8,9}$').hasMatch(phone)) {
+                            return 'Enter a valid Malaysian phone number';
                           }
                           return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      _buildLabel('Language'),
-                      DropdownButtonFormField<String>(
-                        value: _selectedLanguage,
-                        decoration: _fieldDecoration(
-                          hint: 'Select language',
-                          icon: Icons.language_outlined,
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: 'EN', child: Text('English')),
-                          DropdownMenuItem(
-                            value: 'BM',
-                            child: Text('Bahasa Melayu'),
-                          ),
-                        ],
-                        onChanged: _isSaving
-                            ? null
-                            : (value) {
-                          if (value != null) {
-                            setState(() => _selectedLanguage = value);
-                          }
                         },
                       ),
                       const SizedBox(height: 24),

@@ -45,15 +45,48 @@ class _LoginState extends State<LoginPage> {
 
       final authUser = response.user;
 
+
       if (authUser == null) {
         throw Exception('Login failed: user information was not returned');
       }
+
+      if (!mounted) return;
 
       final profile = await Supabase.instance.client
           .from('users')
           .select('user_id')
           .eq('auth_id', authUser.id)
           .maybeSingle();
+
+      if (!mounted) return;
+
+      // Show only during the first login before completing the profile.
+      if (authUser.emailConfirmedAt != null && profile == null) {
+        await showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) {
+            return AlertDialog(
+              icon: const Icon(
+                Icons.mark_email_read,
+                color: Colors.green,
+                size: 48,
+              ),
+              title: const Text('Email Confirmed'),
+              content: const Text(
+                'Your email has been confirmed successfully.',
+                textAlign: TextAlign.center,
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Continue'),
+                ),
+              ],
+            );
+          },
+        );
+      }
 
       if (!mounted) return;
 
@@ -95,15 +128,18 @@ class _LoginState extends State<LoginPage> {
   Future<void> _handleForgotPassword() async {
     final email = _emailController.text.trim();
 
-    if (email.isEmpty || !email.contains('@')) {
+    if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your email first')),
+        const SnackBar(content: Text('Please enter a valid email first')),
       );
       return;
     }
 
     try {
-      await Supabase.instance.client.auth.resetPasswordForEmail(email);
+      await Supabase.instance.client.auth.resetPasswordForEmail(
+        email,
+        //redirectTo: '${Uri.base.origin}/?reset=true',
+      );
 
       if (!mounted) return;
 
@@ -290,6 +326,136 @@ class _LoginState extends State<LoginPage> {
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: Colors.redAccent, width: 1.5),
+      ),
+    );
+  }
+}
+
+class ResetPasswordPage extends StatefulWidget {
+  const ResetPasswordPage({super.key});
+
+  @override
+  State<ResetPasswordPage> createState() => _ResetPasswordPageState();
+}
+
+class _ResetPasswordPageState extends State<ResetPasswordPage> {
+  static const navy = Color(0xFF3472CA);
+  final _formKey = GlobalKey<FormState>();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  bool _isSaving = false;
+  bool _obscurePassword = true;
+
+  @override
+  void dispose() {
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _updatePassword() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    setState(() => _isSaving = true);
+
+    try {
+      await Supabase.instance.client.auth.updateUser(
+        UserAttributes(password: _passwordController.text),
+      );
+      await Supabase.instance.client.auth.signOut();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Password updated. Please log in.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+            (route) => false,
+      );
+    } on AuthException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Reset Password'),
+        backgroundColor: navy,
+        foregroundColor: Colors.white,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextFormField(
+                controller: _passwordController,
+                obscureText: _obscurePassword,
+                decoration: InputDecoration(
+                  labelText: 'New password',
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    onPressed: () => setState(
+                          () => _obscurePassword = !_obscurePassword,
+                    ),
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                    ),
+                  ),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'New password is required';
+                  }
+                  if (value.length < 8) return 'Use at least 8 characters';
+                  if (!RegExp(r'[A-Z]').hasMatch(value) ||
+                      !RegExp(r'[a-z]').hasMatch(value) ||
+                      !RegExp(r'\d').hasMatch(value)) {
+                    return 'Include uppercase, lowercase and a number';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _confirmPasswordController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Confirm new password',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) => value != _passwordController.text
+                    ? 'Passwords do not match'
+                    : null,
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: _isSaving ? null : _updatePassword,
+                child: _isSaving
+                    ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+                    : const Text('Update Password'),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
