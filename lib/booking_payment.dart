@@ -70,6 +70,23 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
         : const ['Butterworth', 'Georgetown Terminal'];
   }
 
+  DateTime _entryDateTime(ScheduleSlot entry) {
+    final parts = entry.time.split(':');
+    return DateTime(
+      selectedDate.year,
+      selectedDate.month,
+      selectedDate.day,
+      int.parse(parts[0]),
+      int.parse(parts[1]),
+    );
+  }
+
+  List<ScheduleSlot> _applyPastFilter(List<ScheduleSlot> entries) {
+    final now = DateTime.now();
+    if (!_isSameDay(selectedDate, now)) return entries;
+    return entries.where((e) => _entryDateTime(e).isAfter(now)).toList();
+  }
+
   Future<void> _loadSlot() async {
     setState(() {
       _loadingSlot = true;
@@ -79,22 +96,27 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
     });
     try {
       final parts = _departureDestination;
-      final slots = await _scheduleService.fetchSchedules(
+      final rawSlots = await _scheduleService.fetchSchedules(
         departure: parts[0],
         destination: parts[1],
         date: selectedDate,
         ferryId: defaultFerryId,
       );
+
+      final filteredSlots = _applyPastFilter(rawSlots);
+
+      filteredSlots.sort((a, b) => a.time.compareTo(b.time));
+
       final ferry = await _scheduleService.fetchFerry(defaultFerryId);
 
       ScheduleSlot? chosen;
-      for (final slot in slots) {
+      for (final slot in filteredSlots) {
         if (slot.time.startsWith(selectedTime)) {
           chosen = slot;
           break;
         }
       }
-      chosen ??= slots.isEmpty ? null : slots.first;
+      chosen ??= filteredSlots.isEmpty ? null : filteredSlots.first;
 
       final booked = chosen == null
           ? <String, int>{}
@@ -102,7 +124,7 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
 
       if (!mounted) return;
       setState(() {
-        _availableSlots = slots;
+        _availableSlots = filteredSlots;
         _schedule = chosen;
         if (chosen != null) selectedTime = chosen.time.substring(0, 5);
         _ferry = ferry;
@@ -226,15 +248,15 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
               child: Center(child: CircularProgressIndicator()),
             )
           else if (_schedule == null)
-            const Text(
-              'Pick a sailing above to see crowd levels.',
-              style: TextStyle(color: Colors.black54, fontSize: 12),
-            )
-          else ...[
-            ...ticketTypes.map(_buildCrowdBar),
-            const SizedBox(height: 8),
-            _buildTotalCrowdBar(),
-          ],
+              const Text(
+                'Pick a sailing above to see crowd levels.',
+                style: TextStyle(color: Colors.black54, fontSize: 12),
+              )
+            else ...[
+                ...ticketTypes.map(_buildCrowdBar),
+                const SizedBox(height: 8),
+                _buildTotalCrowdBar(),
+              ],
           const SizedBox(height: 24),
           Container(
             padding: const EdgeInsets.all(16),
@@ -263,10 +285,10 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
               ),
               child: _confirming
                   ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
-                    )
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+              )
                   : const Text('Confirm & Pay', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ),
