@@ -37,6 +37,7 @@ class _ActivityState extends State<ActivityPage> {
       _error = null;
     });
     try {
+      final entries = await _bookingService.fetchBookingHistory(demoUserId);
       final upcoming = entries.where((e) => !e.isPast).toList()
         ..sort((a, b) => a.sailingAt.compareTo(b.sailingAt));
       final past = entries.where((e) => e.isPast).toList()

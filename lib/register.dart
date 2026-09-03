@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'home.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'complete_profile.dart';
+
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -15,9 +17,7 @@ class _RegisterState extends State<RegisterPage> {
   static const ice = Color(0xFFEAF4F8);
 
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
   final _emailController = TextEditingController();
-  final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
@@ -27,27 +27,70 @@ class _RegisterState extends State<RegisterPage> {
 
   @override
   void dispose() {
-    _nameController.dispose();
     _emailController.dispose();
-    _phoneController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
   }
 
+  //debug ver
   Future<void> _handleRegister() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!(_formKey.currentState?.validate() ?? false)) return;
 
     setState(() => _isSubmitting = true);
-    await Future.delayed(const Duration(milliseconds: 600));
-    if (!mounted) return;
-    setState(() => _isSubmitting = false);
 
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (context) => const HomePage()),
-          (route) => false,
-    );
+    try {
+      final response = await Supabase.instance.client.auth.signUp(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+
+      if (response.user == null) {
+        throw Exception('User registration failed');
+      }
+
+      if (!mounted) return;
+
+      if (response.session != null) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const CompleteProfilePage()),
+              (route) => false,
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Registration successful. Please verify your email, then log in.',
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(context);
+      }
+    } on AuthException catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.message),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString()),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
   }
 
   @override
@@ -77,14 +120,6 @@ class _RegisterState extends State<RegisterPage> {
                         style: TextStyle(fontSize: 13, color: Colors.black54),
                       ),
                       const SizedBox(height: 24),
-                      _buildLabel('Full Name'),
-                      TextFormField(
-                        controller: _nameController,
-                        decoration: _fieldDecoration(hint: 'Your full name', icon: Icons.person_outline),
-                        validator: (value) =>
-                        (value == null || value.trim().isEmpty) ? 'Name is required' : null,
-                      ),
-                      const SizedBox(height: 16),
                       _buildLabel('Email'),
                       TextFormField(
                         controller: _emailController,
@@ -95,15 +130,6 @@ class _RegisterState extends State<RegisterPage> {
                           if (!value.contains('@') || !value.contains('.')) return 'Enter a valid email';
                           return null;
                         },
-                      ),
-                      const SizedBox(height: 16),
-                      _buildLabel('Phone Number'),
-                      TextFormField(
-                        controller: _phoneController,
-                        keyboardType: TextInputType.phone,
-                        decoration: _fieldDecoration(hint: '01X-XXX XXXX', icon: Icons.phone_outlined),
-                        validator: (value) =>
-                        (value == null || value.trim().isEmpty) ? 'Phone number is required' : null,
                       ),
                       const SizedBox(height: 16),
                       _buildLabel('Password'),
