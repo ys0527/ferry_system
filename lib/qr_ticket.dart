@@ -1,11 +1,53 @@
 import 'package:flutter/material.dart';
+import 'constants.dart';
+import 'models/qr_ticket_data.dart';
+import 'services/booking_service.dart';
+import 'widgets/ticket_qr_card.dart';
 
-class QrTicketPage extends StatelessWidget {
-  const QrTicketPage({super.key});
+class QrTicketPage extends StatefulWidget {
+  const QrTicketPage({this.initialData, super.key});
 
+  /// Passed in right after a successful payment. When omitted (e.g. the
+  /// bottom-nav "QR" tab), the page fetches the user's latest confirmed
+  /// ticket instead.
+  final QrTicketData? initialData;
+
+  @override
+  State<QrTicketPage> createState() => _QrTicketPageState();
+}
+
+class _QrTicketPageState extends State<QrTicketPage> {
   static const navy = Color(0xFF3472CA);
-  static const teal = Color(0xFF1E93B8);
   static const ice = Color(0xFFEAF4F8);
+
+  final _bookingService = BookingService();
+
+  bool _loading = false;
+  QrTicketData? _data;
+
+  @override
+  void initState() {
+    super.initState();
+    _data = widget.initialData;
+    if (_data == null) {
+      _loadLatestTicket();
+    }
+  }
+
+  Future<void> _loadLatestTicket() async {
+    setState(() => _loading = true);
+    try {
+      final data = await _bookingService.fetchLatestConfirmedTicket(demoUserId);
+      if (!mounted) return;
+      setState(() {
+        _data = data;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -15,59 +57,67 @@ class QrTicketPage extends StatelessWidget {
         backgroundColor: navy,
         title: const Text('My QR Ticket'),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(color: teal, borderRadius: BorderRadius.circular(18)),
-            child: Column(
-              children: [
-                const Text('Georgetown Terminal \u2192 Butterworth',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                const SizedBox(height: 4),
-                const Text('08:20 · Slot B · 1 Adult',
-                    style: TextStyle(color: Colors.white70, fontSize: 12)),
-                const SizedBox(height: 20),
-                Container(
-                  width: 160,
-                  height: 160,
-                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
-                  alignment: Alignment.center,
-                  child: const Icon(Icons.qr_code_2, size: 120, color: navy),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Text('RM 1.20 · Paid',
-                      style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                ),
-              ],
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _data == null
+              ? _buildEmptyState()
+              : _buildTicket(_data!),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.qr_code_2, size: 64, color: navy),
+            const SizedBox(height: 12),
+            const Text(
+              'No active ticket yet',
+              style: TextStyle(fontWeight: FontWeight.bold, color: navy),
             ),
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(color: ice, borderRadius: BorderRadius.circular(14)),
-            child: const Row(
-              children: [
-                Icon(Icons.info_outline, color: navy, size: 18),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Show this QR code to the boarding officer to check in.',
-                    style: TextStyle(fontSize: 12, color: navy),
-                  ),
-                ),
-              ],
+            const SizedBox(height: 6),
+            const Text(
+              'Book a sailing to get your QR ticket here.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: Colors.black54),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildTicket(QrTicketData data) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        TicketQrCard(
+          route: data.route,
+          subtitle: '${data.date} · ${data.time} · ${data.ticketSummary}',
+          reference: data.reference,
+          fare: data.fare,
+        ),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(color: ice, borderRadius: BorderRadius.circular(14)),
+          child: const Row(
+            children: [
+              Icon(Icons.info_outline, color: navy, size: 18),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Show this QR code to the boarding officer to check in.',
+                  style: TextStyle(fontSize: 12, color: navy),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

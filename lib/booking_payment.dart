@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
+import 'constants.dart';
+import 'models/ferry.dart';
+import 'models/schedule.dart';
 import 'payment.dart';
+import 'services/booking_service.dart';
+import 'services/schedule_service.dart';
 
 class BookingPaymentPage extends StatefulWidget {
   const BookingPaymentPage({
@@ -26,22 +31,77 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
   static const levelAmber = Color(0xFFE3A72E);
   static const levelRed = Color(0xFFE0483C);
 
-  late String direction = widget.initialDirection ?? 'Georgetown Terminal \u2192 Butterworth';
+  final _scheduleService = ScheduleService();
+  final _bookingService = BookingService();
+
+  late String direction = widget.initialDirection ?? 'Georgetown Terminal → Butterworth';
   late final List<DateTime> availableDates =
   List.generate(7, (i) => DateTime.now().add(Duration(days: i)));
   late DateTime selectedDate = widget.initialDate ?? availableDates.first;
 
   late String selectedTime = widget.initialTime ?? '08:20';
-  final List<String> timeSlots = const ['07:50', '08:20', '08:50', '09:20', '09:50'];
+  final List<String> timeSlots =
+      const ['07:50', '08:20', '08:50', '09:20', '09:50', '10:20'];
 
   final List<Map<String, dynamic>> ticketTypes = const [
-    {'key': 'adult', 'label': 'Adult', 'icon': Icons.person, 'price': 1.20, 'capacity': 150, 'baseBooked': 95},
-    {'key': 'child', 'label': 'Child', 'icon': Icons.child_care, 'price': 0.60, 'capacity': 50, 'baseBooked': 20},
-    {'key': 'bicycle', 'label': 'Bicycle', 'icon': Icons.pedal_bike, 'price': 1.00, 'capacity': 25, 'baseBooked': 9},
-    {'key': 'motorcycle', 'label': 'Motorcycle', 'icon': Icons.two_wheeler, 'price': 3.00, 'capacity': 25, 'baseBooked': 14},
+    {'key': 'adult', 'label': 'Adult', 'icon': Icons.person, 'price': 2.50},
+    {'key': 'child', 'label': 'Child', 'icon': Icons.child_care, 'price': 2.00},
+    {'key': 'bicycle', 'label': 'Bicycle', 'icon': Icons.pedal_bike, 'price': 2.00},
+    {'key': 'motorcycle', 'label': 'Motorcycle', 'icon': Icons.two_wheeler, 'price': 3.00},
   ];
 
   final Map<String, int> counts = {'adult': 1, 'child': 0, 'bicycle': 0, 'motorcycle': 0};
+
+  bool _loadingSlot = true;
+  bool _confirming = false;
+  String? _slotError;
+  ScheduleSlot? _schedule;
+  Ferry? _ferry;
+  Map<String, int> _booked = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSlot();
+  }
+
+  List<String> get _departureDestination {
+    return direction.startsWith('Georgetown')
+        ? const ['Georgetown Terminal', 'Butterworth']
+        : const ['Butterworth', 'Georgetown Terminal'];
+  }
+
+  Future<void> _loadSlot() async {
+    setState(() {
+      _loadingSlot = true;
+      _slotError = null;
+    });
+    try {
+      final parts = _departureDestination;
+      final schedule = await _scheduleService.findOrCreateSchedule(
+        departure: parts[0],
+        destination: parts[1],
+        date: selectedDate,
+        time: selectedTime,
+        ferryId: defaultFerryId,
+      );
+      final ferry = await _scheduleService.fetchFerry(defaultFerryId);
+      final booked = await _scheduleService.fetchBookedCounts(schedule.scheduleId);
+      if (!mounted) return;
+      setState(() {
+        _schedule = schedule;
+        _ferry = ferry;
+        _booked = booked;
+        _loadingSlot = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _slotError = 'Could not load this sailing: $e';
+        _loadingSlot = false;
+      });
+    }
+  }
 
   double get fare {
     double total = 0;
@@ -68,6 +128,41 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
   bool _isSameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
 
+  Future<void> _confirmAndPay() async {
+    if (_schedule == null) return;
+    setState(() => _confirming = true);
+    try {
+      final bookingId = await _bookingService.createPendingBooking(
+        scheduleId: _schedule!.scheduleId,
+        ferryId: defaultFerryId,
+        ticketTypes: ticketTypes,
+        counts: counts,
+        fare: fare,
+      );
+      if (!mounted) return;
+      setState(() => _confirming = false);
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => PaymentPage(
+            bookingId: bookingId,
+            route: direction,
+            date: '${_weekdayLabel(selectedDate)}, ${selectedDate.day}/${selectedDate.month}',
+            time: selectedTime,
+            ticketSummary: ticketSummary,
+            fare: fare,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _confirming = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -91,10 +186,19 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
           _buildLabel('Ticket Types'),
           ...ticketTypes.map(_buildTicketRow),
           const SizedBox(height: 20),
-          _buildLabel('Crowd Density \u2014 This Sailing'),
-          ...ticketTypes.map(_buildCrowdBar),
-          const SizedBox(height: 8),
-          _buildTotalCrowdBar(),
+          _buildLabel('Crowd Density — This Sailing'),
+          if (_slotError != null)
+            Text(_slotError!, style: const TextStyle(color: alert, fontSize: 12))
+          else if (_loadingSlot)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else ...[
+            ...ticketTypes.map(_buildCrowdBar),
+            const SizedBox(height: 8),
+            _buildTotalCrowdBar(),
+          ],
           const SizedBox(height: 24),
           Container(
             padding: const EdgeInsets.all(16),
@@ -112,29 +216,22 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: fare == 0
+              onPressed: (fare == 0 || _loadingSlot || _confirming || _schedule == null)
                   ? null
-                  : () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => PaymentPage(
-                      route: direction,
-                      date: '${_weekdayLabel(selectedDate)}, ${selectedDate.day}/${selectedDate.month}',
-                      time: selectedTime,
-                      ticketSummary: ticketSummary,
-                      fare: fare,
-                    ),
-                  ),
-                );
-              },
+                  : _confirmAndPay,
               style: ElevatedButton.styleFrom(
                 backgroundColor: navy,
                 disabledBackgroundColor: Colors.grey.shade300,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
               ),
-              child: const Text('Confirm & Pay', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              child: _confirming
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                    )
+                  : const Text('Confirm & Pay', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ),
         ],
@@ -143,7 +240,7 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
   }
 
   Widget _buildDirectionToggle() {
-    const options = ['Georgetown Terminal \u2192 Butterworth', 'Butterworth \u2192 Georgetown Terminal'];
+    const options = ['Georgetown Terminal → Butterworth', 'Butterworth → Georgetown Terminal'];
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(color: ice, borderRadius: BorderRadius.circular(24)),
@@ -152,7 +249,10 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
           final selected = opt == direction;
           return Expanded(
             child: GestureDetector(
-              onTap: () => setState(() => direction = opt),
+              onTap: () {
+                setState(() => direction = opt);
+                _loadSlot();
+              },
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 decoration: BoxDecoration(
@@ -188,7 +288,10 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
           final date = availableDates[index];
           final selected = _isSameDay(date, selectedDate);
           return GestureDetector(
-            onTap: () => setState(() => selectedDate = date),
+            onTap: () {
+              setState(() => selectedDate = date);
+              _loadSlot();
+            },
             child: Container(
               width: 56,
               decoration: BoxDecoration(
@@ -222,7 +325,10 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
       children: timeSlots.map((time) {
         final selected = time == selectedTime;
         return GestureDetector(
-          onTap: () => setState(() => selectedTime = time),
+          onTap: () {
+            setState(() => selectedTime = time);
+            _loadSlot();
+          },
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
@@ -281,10 +387,10 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
 
   Widget _buildCrowdBar(Map<String, dynamic> t) {
     final key = t['key'] as String;
-    final capacity = t['capacity'] as int;
-    final baseBooked = t['baseBooked'] as int;
+    final capacity = _ferry?.capacityFor(key) ?? 0;
+    final baseBooked = _booked[key] ?? 0;
     final booked = baseBooked + (counts[key] ?? 0);
-    final ratio = (booked / capacity).clamp(0.0, 1.0);
+    final ratio = capacity == 0 ? 0.0 : (booked / capacity).clamp(0.0, 1.0);
     final color = ratio >= 0.85 ? alert : teal;
 
     return Padding(
@@ -318,10 +424,11 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
     int totalCapacity = 0;
     int totalBooked = 0;
     for (final t in ticketTypes) {
-      totalCapacity += t['capacity'] as int;
-      totalBooked += (t['baseBooked'] as int) + (counts[t['key']] ?? 0);
+      final key = t['key'] as String;
+      totalCapacity += _ferry?.capacityFor(key) ?? 0;
+      totalBooked += (_booked[key] ?? 0) + (counts[key] ?? 0);
     }
-    final ratio = (totalBooked / totalCapacity).clamp(0.0, 1.0);
+    final ratio = totalCapacity == 0 ? 0.0 : (totalBooked / totalCapacity).clamp(0.0, 1.0);
 
     String level;
     Color levelColor;
