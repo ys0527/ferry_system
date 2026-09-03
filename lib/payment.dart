@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
+import 'constants.dart';
+import 'models/qr_ticket_data.dart';
 import 'qr_ticket.dart';
+import 'services/payment_service.dart';
 
 class PaymentPage extends StatefulWidget {
   const PaymentPage({
+    required this.bookingId,
     required this.route,
     required this.date,
     required this.time,
@@ -12,6 +16,7 @@ class PaymentPage extends StatefulWidget {
     super.key,
   });
 
+  final String bookingId;
   final String route;
   final String date;
   final String time;
@@ -27,36 +32,54 @@ class _PaymentState extends State<PaymentPage> {
   static const teal = Color(0xFF1E93B8);
   static const ice = Color(0xFFEAF4F8);
 
-  bool _isPaying = false;
+  final _paymentService = PaymentService();
 
-  Future<String> _fetchClientSecretFromBackend() async {
-    const demoClientSecret = 'pi_3TwdPwKyvqb9xJlK1zsPtzbX_secret_BqMtltPQG0OV9vXOMaDa3r0UU';
-    return demoClientSecret;
-  }
+  bool _isPaying = false;
 
   Future<void> _payWithPaymentSheet() async {
     setState(() => _isPaying = true);
 
     try {
-      final clientSecret = await _fetchClientSecretFromBackend();
+      final intent = await _paymentService.createPaymentIntent(
+        bookingId: widget.bookingId,
+      );
 
       await Stripe.instance.initPaymentSheet(
         paymentSheetParameters: SetupPaymentSheetParameters(
-          paymentIntentClientSecret: clientSecret,
+          paymentIntentClientSecret: intent.clientSecret,
           merchantDisplayName: 'FerryLink Penang',
         ),
       );
 
       await Stripe.instance.presentPaymentSheet();
 
+      final reference = await _paymentService.confirmBookingPaid(
+        bookingId: widget.bookingId,
+        paymentIntentId: intent.paymentIntentId,
+        customerId: intent.customerId,
+        amount: intent.amount,
+      );
+
       if (!mounted) return;
       setState(() => _isPaying = false);
       await _showPointsEarnedDialog();
 
       if (!mounted) return;
-      Navigator.pushReplacement(
+      Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (context) => const QrTicketPage()),
+        MaterialPageRoute(
+          builder: (context) => QrTicketPage(
+            initialData: QrTicketData(
+              reference: reference,
+              route: widget.route,
+              date: widget.date,
+              time: widget.time,
+              ticketSummary: widget.ticketSummary,
+              fare: widget.fare,
+            ),
+          ),
+        ),
+        (route) => route.isFirst,
       );
     } on StripeException catch (e) {
       if (!mounted) return;
@@ -76,7 +99,7 @@ class _PaymentState extends State<PaymentPage> {
   }
 
   Future<void> _showPointsEarnedDialog() async {
-    final points = (widget.fare * 6).round();
+    final points = rewardPointsFor(widget.fare);
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -210,4 +233,3 @@ class _PaymentState extends State<PaymentPage> {
     );
   }
 }
-

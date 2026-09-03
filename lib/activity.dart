@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'booking_detail.dart';
+import 'models/booking_history_entry.dart';
 import 'reviews_ratings.dart';
+import 'services/booking_service.dart';
+import 'services/current_user_service.dart';
 
 class ActivityPage extends StatefulWidget {
   const ActivityPage({super.key});
@@ -13,55 +17,61 @@ class _ActivityState extends State<ActivityPage> {
   static const teal = Color(0xFF1E93B8);
   static const ice = Color(0xFFEAF4F8);
 
+  final _bookingService = BookingService();
+
   bool showUpcoming = true;
+  bool _loading = true;
+  String? _error;
+  List<BookingHistoryEntry> _upcoming = const [];
+  List<BookingHistoryEntry> _past = const [];
 
-  final List<Map<String, dynamic>> upcomingBookings = const [
-    {
-      'route': 'Georgetown Terminal \u2192 Butterworth',
-      'datetime': '23 Jul \u00b7 08:20',
-      'status': 'Confirmed',
-      'ferryNo': 'FL-204',
-      'port': 'Georgetown Terminal',
-    },
-    {
-      'route': 'Butterworth \u2192 Georgetown Terminal',
-      'datetime': '25 Jul \u00b7 18:00',
-      'status': 'Confirmed',
-      'ferryNo': 'FL-311',
-      'port': 'Butterworth Terminal',
-    },
+  @override
+  void initState() {
+    super.initState();
+    _loadHistory();
+  }
+
+  Future<void> _loadHistory() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final userId = await currentUserId();
+      final entries = await _bookingService.fetchBookingHistory(userId);
+      final upcoming = entries.where((e) => !e.isPast).toList()
+        ..sort((a, b) => a.sailingAt.compareTo(b.sailingAt));
+      final past = entries.where((e) => e.isPast).toList()
+        ..sort((a, b) => b.sailingAt.compareTo(a.sailingAt));
+      if (!mounted) return;
+      setState(() {
+        _upcoming = upcoming;
+        _past = past;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Could not load your bookings: $e';
+        _loading = false;
+      });
+    }
+  }
+
+  static const _months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
   ];
 
-  final List<Map<String, dynamic>> pastBookings = const [
-    {
-      'route': 'Georgetown Terminal \u2192 Butterworth',
-      'datetime': '18 Jul \u00b7 07:50',
-      'status': 'Completed',
-      'ferryNo': 'FL-198',
-      'port': 'Georgetown Terminal',
-      'points': 8,
-    },
-    {
-      'route': 'Butterworth \u2192 Georgetown Terminal',
-      'datetime': '15 Jul \u00b7 17:30',
-      'status': 'Completed',
-      'ferryNo': 'FL-276',
-      'port': 'Butterworth Terminal',
-      'points': 8,
-    },
-    {
-      'route': 'Georgetown Terminal \u2192 Butterworth',
-      'datetime': '10 Jul \u00b7 08:20',
-      'status': 'Completed',
-      'ferryNo': 'FL-142',
-      'port': 'Georgetown Terminal',
-      'points': 6,
-    },
-  ];
+  String _formatSailing(DateTime at) {
+    final hh = at.hour.toString().padLeft(2, '0');
+    final mm = at.minute.toString().padLeft(2, '0');
+    return '${at.day} ${_months[at.month - 1]} \u00b7 $hh:$mm';
+  }
 
   @override
   Widget build(BuildContext context) {
-    final bookings = showUpcoming ? upcomingBookings : pastBookings;
+    final bookings = showUpcoming ? _upcoming : _past;
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -84,9 +94,13 @@ class _ActivityState extends State<ActivityPage> {
             ),
           ),
           Expanded(
-            child: bookings.isEmpty
-                ? const Center(child: Text('No bookings here yet.'))
-                : ListView.separated(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                    ? _buildError()
+                    : bookings.isEmpty
+                        ? const Center(child: Text('No bookings here yet.'))
+                        : ListView.separated(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: bookings.length,
               separatorBuilder: (_, __) => const SizedBox(height: 10),
@@ -94,6 +108,26 @@ class _ActivityState extends State<ActivityPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildError() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 12, color: Colors.black54),
+            ),
+            const SizedBox(height: 12),
+            TextButton(onPressed: _loadHistory, child: const Text('Try again')),
+          ],
+        ),
       ),
     );
   }
@@ -123,9 +157,9 @@ class _ActivityState extends State<ActivityPage> {
     );
   }
 
-  Widget _buildBookingCard(Map<String, dynamic> booking) {
-    final isPast = booking['status'] == 'Completed';
-    return Container(
+  Widget _buildBookingCard(BookingHistoryEntry booking) {
+    final isPast = booking.isPast;
+    final card = Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(color: ice, borderRadius: BorderRadius.circular(14)),
       child: Column(
@@ -143,13 +177,21 @@ class _ActivityState extends State<ActivityPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(booking['route'] as String,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: navy)),
-                    const SizedBox(height: 2),
-                    Text(booking['datetime'] as String, style: const TextStyle(fontSize: 11, color: Colors.black54)),
+                    Text(booking.route,
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12.5,
+                            color: isPast ? Colors.black45 : navy)),
                     const SizedBox(height: 2),
                     Text(
-                      'Ferry ${booking['ferryNo']} \u00b7 ${booking['port']}',
+                      isPast
+                          ? 'Completed \u00b7 ${_formatSailing(booking.sailingAt)}'
+                          : _formatSailing(booking.sailingAt),
+                      style: const TextStyle(fontSize: 11, color: Colors.black54),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Ferry ${booking.ferryNum} \u00b7 ${booking.departurePort}',
                       style: const TextStyle(fontSize: 10.5, color: Colors.black45),
                     ),
                   ],
@@ -162,7 +204,7 @@ class _ActivityState extends State<ActivityPage> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => ReviewsRatingsPage(tripLabel: booking['route'] as String),
+                        builder: (context) => ReviewsRatingsPage(tripLabel: booking.route),
                       ),
                     );
                   },
@@ -188,13 +230,23 @@ class _ActivityState extends State<ActivityPage> {
               children: [
                 const Icon(Icons.card_giftcard, size: 14, color: teal),
                 const SizedBox(width: 6),
-                Text('+${booking['points']} Reward Points earned',
+                Text('+${booking.pointsEarned} Reward Points earned',
                     style: const TextStyle(fontSize: 10.5, color: navy, fontWeight: FontWeight.w600)),
               ],
             ),
           ],
         ],
       ),
+    );
+
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => BookingDetailPage(bookingId: booking.bookingId),
+        ),
+      ),
+      child: card,
     );
   }
 }
