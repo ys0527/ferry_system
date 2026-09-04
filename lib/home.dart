@@ -7,6 +7,7 @@ import 'inbox.dart';
 import 'booking_payment.dart';
 import 'rewards.dart';
 import 'activity.dart';
+import 'weather.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -25,9 +26,6 @@ class _HomeState extends State<HomePage> {
 
   String userName = '';
   String language = 'EN';
-
-  String weatherCondition = '';
-  String weatherNote = '';
 
   String nextFerryDestination = '';
   String nextFerryTime = '';
@@ -59,8 +57,6 @@ class _HomeState extends State<HomePage> {
 
       setState(() {
         userName = userData?['name'] ?? 'User';
-        weatherCondition = 'Partly Cloudy, 29°C';
-        weatherNote = 'Sailing as scheduled';
         nextFerryDestination = 'Butterworth';
         nextFerryTime = '08:20';
         nextFerryMinutesAway = 12;
@@ -71,8 +67,6 @@ class _HomeState extends State<HomePage> {
 
       setState(() {
         userName = 'User';
-        weatherCondition = 'Partly Cloudy, 29°C';
-        weatherNote = 'Sailing as scheduled';
         nextFerryDestination = 'Butterworth';
         nextFerryTime = '08:20';
         nextFerryMinutesAway = 12;
@@ -88,33 +82,10 @@ class _HomeState extends State<HomePage> {
     }
   }
 
-  void _showWeatherDetail() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Weather & Sailing Conditions'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(weatherCondition, style: const TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 6),
-            Text(weatherNote),
-            const SizedBox(height: 12),
-            const Text(
-              'Wind: 12 km/h · Sea state: Slight\nVisibility: Good',
-              style: TextStyle(fontSize: 12, color: Colors.black54),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
+  void _openWeatherSailing() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const WeatherSailingPage()),
     );
   }
 
@@ -273,7 +244,7 @@ class _HomeState extends State<HomePage> {
 
   Widget _buildWeatherWidget() {
     return GestureDetector(
-      onTap: _showWeatherDetail,
+      onTap: _openWeatherSailing,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
@@ -291,9 +262,10 @@ class _HomeState extends State<HomePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(weatherCondition,
+                  Text('Weather & Sailing Conditions',
                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-                  Text(weatherNote, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                  Text('Tap for live sea and weather conditions',
+                      style: const TextStyle(color: Colors.white70, fontSize: 11)),
                 ],
               ),
             ),

@@ -204,7 +204,7 @@ class _ActivityState extends State<ActivityPage> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => ReviewsRatingsPage(tripLabel: booking.route),
+                        builder: (context) => ReviewsRatingsPage(bookingId: booking.bookingId, tripLabel: booking.route),
                       ),
                     );
                   },
