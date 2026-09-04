@@ -36,6 +36,8 @@ class _PaymentState extends State<PaymentPage> {
 
   bool _isPaying = false;
 
+  bool _sheetOpen = false;
+
   Future<void> _payWithPaymentSheet() async {
     setState(() => _isPaying = true);
 
@@ -51,7 +53,21 @@ class _PaymentState extends State<PaymentPage> {
         ),
       );
 
+      if (mounted) {
+        setState(() {
+          _isPaying = false;
+          _sheetOpen = true;
+        });
+      }
+
       await Stripe.instance.presentPaymentSheet();
+
+      if (mounted) {
+        setState(() {
+          _sheetOpen = false;
+          _isPaying = true;
+        });
+      }
 
       final reference = await _paymentService.confirmBookingPaid(
         bookingId: widget.bookingId,
@@ -83,7 +99,10 @@ class _PaymentState extends State<PaymentPage> {
       );
     } on StripeException catch (e) {
       if (!mounted) return;
-      setState(() => _isPaying = false);
+      setState(() {
+        _isPaying = false;
+        _sheetOpen = false;
+      });
       if (e.error.code != FailureCode.Canceled) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Payment failed: ${e.error.localizedMessage ?? e.error.code}')),
@@ -91,7 +110,10 @@ class _PaymentState extends State<PaymentPage> {
       }
     } catch (e) {
       if (!mounted) return;
-      setState(() => _isPaying = false);
+      setState(() {
+        _isPaying = false;
+        _sheetOpen = false;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('$e')),
       );
@@ -194,7 +216,7 @@ class _PaymentState extends State<PaymentPage> {
             width: double.infinity,
             height: 50,
             child: ElevatedButton(
-              onPressed: _isPaying ? null : _payWithPaymentSheet,
+              onPressed: (_isPaying || _sheetOpen) ? null : _payWithPaymentSheet,
               style: ElevatedButton.styleFrom(
                 backgroundColor: teal,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),

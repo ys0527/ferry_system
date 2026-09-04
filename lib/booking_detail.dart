@@ -79,8 +79,10 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
     return '${at.day} ${_months[at.month - 1]} ${at.year} · $hh:$mm';
   }
 
-  String _shortIntent(String id) =>
-      id.length <= 14 ? id : '…${id.substring(id.length - 12)}';
+  String _shortIntent(String? id) {
+    if (id == null || id.isEmpty) return '—';
+    return id.length <= 14 ? id : '…${id.substring(id.length - 12)}';
+  }
 
   Future<void> _addToCalendar(BookingDetail d) async {
     final description = StringBuffer()
@@ -227,7 +229,14 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
               _group(
                 'Payment',
                 rows: payment == null
-                    ? [_row('Status', 'Not paid yet')]
+                    ? [
+                        _row(
+                          'Status',
+                          d.status == 'Confirmed'
+                              ? 'Covered by voucher'
+                              : 'Not paid yet',
+                        ),
+                      ]
                     : [
                         _row('Method', payment.method),
                         _row('Status', payment.status),
