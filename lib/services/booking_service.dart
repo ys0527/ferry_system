@@ -98,7 +98,7 @@ class BookingService {
           'booking_id, reference, total, schedule:schedule_id(departure, destination, date, time, ferry:ferry_id(ferry_num)), ticket(type, quantity)',
         )
         .eq('user_id', userId)
-        .eq('status', 'Confirmed');
+        .inFilter('status', ['Confirmed', 'Completed']);
 
     return rows.map(BookingHistoryEntry.fromMap).toList();
   }
