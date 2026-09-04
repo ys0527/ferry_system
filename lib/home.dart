@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'constants.dart';
 import 'models/schedule.dart';
+import 'services/crowd_density_service.dart';
 import 'services/schedule_service.dart';
+import 'widgets/crowd_density_badge.dart';
 import 'ferry_schedule.dart';
 import 'qr_ticket.dart';
 import 'account.dart';
@@ -33,6 +35,7 @@ class _HomeState extends State<HomePage> {
   static const ice = Color(0xFFEAF4F8);
 
   final _scheduleService = ScheduleService();
+  final _crowdService = CrowdDensityService();
 
   bool isLoading = true;
 
@@ -41,6 +44,7 @@ class _HomeState extends State<HomePage> {
 
   ScheduleSlot? nextFerry;
   String nextFerryDirection = '';
+  String? nextFerryCrowdLevel;
 
   int bottomNavIndex = 0;
 
@@ -127,12 +131,30 @@ class _HomeState extends State<HomePage> {
       }
     }
 
+    String? crowdLevel;
+    if (nextSailing != null) {
+      try {
+        final ferry = await _scheduleService.fetchFerry(defaultFerryId);
+        final totals = await _crowdService.fetchBookedTotals(
+          [nextSailing.slot.scheduleId],
+        );
+        final capacity = ferry.adultCap + ferry.childCap + ferry.bicycleCap + ferry.motorcycleCap;
+        crowdLevel = _crowdService.levelFor(
+          totals[nextSailing.slot.scheduleId] ?? 0,
+          capacity,
+        );
+      } catch (_) {
+        crowdLevel = null;
+      }
+    }
+
     if (!mounted) return;
 
     setState(() {
       userName = name;
       nextFerry = nextSailing?.slot;
       nextFerryDirection = nextSailing?.direction ?? '';
+      nextFerryCrowdLevel = crowdLevel;
       isLoading = false;
     });
   }
@@ -443,6 +465,10 @@ class _HomeState extends State<HomePage> {
                   ),
                   Text('Departs in $minutesAway min',
                       style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                  if (nextFerryCrowdLevel != null) ...[
+                    const SizedBox(height: 6),
+                    CrowdDensityBadge(level: nextFerryCrowdLevel!),
+                  ],
                 ],
               ),
             ),
