@@ -1,5 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'constants.dart';
+import 'models/schedule.dart';
+import 'services/schedule_service.dart';
 import 'ferry_schedule.dart';
 import 'qr_ticket.dart';
 import 'account.dart';
@@ -16,30 +20,68 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomeState();
 }
 
+class _NextSailing {
+  const _NextSailing(this.slot, this.direction);
+  final ScheduleSlot slot;
+  final String direction;
+}
+
 class _HomeState extends State<HomePage> {
   static const navy = Color(0xFF3472CA);
   static const teal = Color(0xFF1E93B8);
   static const deepBlue = Color(0xFF2458A8);
   static const ice = Color(0xFFEAF4F8);
 
+  final _scheduleService = ScheduleService();
+
   bool isLoading = true;
 
   String userName = '';
   String language = 'EN';
 
-  String nextFerryDestination = '';
-  String nextFerryTime = '';
-  int nextFerryMinutesAway = 0;
+  ScheduleSlot? nextFerry;
+  String nextFerryDirection = '';
 
   int bottomNavIndex = 0;
+
+  Timer? _minuteTicker;
 
   @override
   void initState() {
     super.initState();
     loadHomeData();
+    _minuteTicker = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!mounted) return;
+
+      final next = nextFerry;
+      if (next != null) {
+        final parts = next.time.split(':');
+        final now = DateTime.now();
+        final departureTime = DateTime(
+          now.year,
+          now.month,
+          now.day,
+          int.parse(parts[0]),
+          int.parse(parts[1]),
+        );
+        if (!departureTime.isAfter(now)) {
+          loadHomeData();
+          return;
+        }
+      }
+
+      setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _minuteTicker?.cancel();
+    super.dispose();
   }
 
   Future<void> loadHomeData() async {
+    String name = 'User';
     try {
       final authUser = Supabase.instance.client.auth.currentUser;
 
@@ -53,33 +95,89 @@ class _HomeState extends State<HomePage> {
           .eq('auth_id', authUser.id)
           .maybeSingle();
 
-      if (!mounted) return;
-
-      setState(() {
-        userName = userData?['name'] ?? 'User';
-        nextFerryDestination = 'Butterworth';
-        nextFerryTime = '08:20';
-        nextFerryMinutesAway = 12;
-        isLoading = false;
-      });
+      name = userData?['name'] ?? 'User';
     } catch (error) {
-      if (!mounted) return;
-
-      setState(() {
-        userName = 'User';
-        nextFerryDestination = 'Butterworth';
-        nextFerryTime = '08:20';
-        nextFerryMinutesAway = 12;
-        isLoading = false;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Unable to load user name: $error'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Unable to load user name: $error'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
     }
+
+    _NextSailing? nextSailing;
+    try {
+      nextSailing = await _findNextSailing();
+    } catch (_) {
+      try {
+        await Future.delayed(const Duration(milliseconds: 500));
+        nextSailing = await _findNextSailing();
+      } catch (retryError) {
+        nextSailing = null;
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Unable to load next sailing: $retryError'),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+      }
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      userName = name;
+      nextFerry = nextSailing?.slot;
+      nextFerryDirection = nextSailing?.direction ?? '';
+      isLoading = false;
+    });
+  }
+
+  Future<_NextSailing?> _findNextSailing() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    const routes = [
+      ['Georgetown Terminal', 'Butterworth'],
+      ['Butterworth', 'Georgetown Terminal'],
+    ];
+
+    ScheduleSlot? bestSlot;
+    String bestDirection = '';
+
+    for (final route in routes) {
+      final slots = await _scheduleService.fetchSchedules(
+        departure: route[0],
+        destination: route[1],
+        date: today,
+        ferryId: defaultFerryId,
+      );
+
+      for (final slot in slots) {
+        if (slot.status == 'Cancelled') continue;
+
+        final parts = slot.time.split(':');
+        final departureTime = DateTime(
+          today.year,
+          today.month,
+          today.day,
+          int.parse(parts[0]),
+          int.parse(parts[1]),
+        );
+        if (!departureTime.isAfter(now)) continue;
+
+        if (bestSlot == null || slot.time.compareTo(bestSlot.time) < 0) {
+          bestSlot = slot;
+          bestDirection = route[1];
+        }
+      }
+    }
+
+    return bestSlot == null ? null : _NextSailing(bestSlot, bestDirection);
   }
 
   void _openWeatherSailing() {
@@ -277,29 +375,80 @@ class _HomeState extends State<HomePage> {
   }
 
   Widget _buildUpcomingScheduleCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: teal, borderRadius: BorderRadius.circular(16)),
-      child: Row(
-        children: [
-          const Icon(Icons.directions_boat, color: Colors.white, size: 28),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Upcoming Ferry Schedule',
-                    style: TextStyle(color: Colors.white70, fontSize: 11)),
-                Text(
-                  '$nextFerryTime → $nextFerryDestination',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
-                ),
-                Text('Departs in $nextFerryMinutesAway min',
-                    style: const TextStyle(color: Colors.white70, fontSize: 11)),
-              ],
+    final next = nextFerry;
+
+    if (next == null) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: teal, borderRadius: BorderRadius.circular(16)),
+        child: const Row(
+          children: [
+            Icon(Icons.directions_boat, color: Colors.white, size: 28),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'No more sailings today',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final displayTime = next.time.length >= 5 ? next.time.substring(0, 5) : next.time;
+    final parts = next.time.split(':');
+    final now = DateTime.now();
+    final departureTime = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      int.parse(parts[0]),
+      int.parse(parts[1]),
+    );
+    final minutesAway = departureTime.difference(now).inMinutes;
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => BookingPaymentPage(
+              initialDirection: '${next.departure} \u2192 ${next.destination}',
+              initialDate: DateTime.now(),
+              initialTime: displayTime,
             ),
           ),
-        ],
+        ).then((_) {
+          if (!mounted) return;
+          loadHomeData();
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: teal, borderRadius: BorderRadius.circular(16)),
+        child: Row(
+          children: [
+            const Icon(Icons.directions_boat, color: Colors.white, size: 28),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Upcoming Ferry Schedule',
+                      style: TextStyle(color: Colors.white70, fontSize: 11)),
+                  Text(
+                    '$displayTime \u2192 $nextFerryDirection',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
+                  Text('Departs in $minutesAway min',
+                      style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: Colors.white70),
+          ],
+        ),
       ),
     );
   }
