@@ -34,14 +34,14 @@ class PaymentRecord {
   final String status;
   final double amount;
   final DateTime paidAt;
-  final String intentId;
+  final String? intentId;
 
   factory PaymentRecord.fromMap(Map<String, dynamic> map) => PaymentRecord(
     method: map['method'] as String,
     status: map['status'] as String,
     amount: (map['total_amount'] as num).toDouble(),
     paidAt: DateTime.parse(map['created_at'] as String).toLocal(),
-    intentId: map['stripe_payment_intent_id'] as String,
+    intentId: map['stripe_payment_intent_id'] as String?,
   );
 }
 

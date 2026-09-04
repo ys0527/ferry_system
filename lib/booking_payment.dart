@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
 import 'constants.dart';
 import 'models/ferry.dart';
+import 'models/qr_ticket_data.dart';
 import 'models/schedule.dart';
+import 'models/voucher.dart';
 import 'payment.dart';
+import 'qr_ticket.dart';
+import 'rewards.dart';
 import 'services/booking_service.dart';
+import 'services/current_user_service.dart';
+import 'services/reward_service.dart';
 import 'services/schedule_service.dart';
 
 class BookingPaymentPage extends StatefulWidget {
@@ -33,6 +39,7 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
 
   final _scheduleService = ScheduleService();
   final _bookingService = BookingService();
+  final _rewardService = RewardService();
 
   late String direction = widget.initialDirection ?? 'Georgetown Terminal → Butterworth';
   late final List<DateTime> availableDates =
@@ -58,10 +65,41 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
   Ferry? _ferry;
   Map<String, int> _booked = {};
 
+  bool _loadingVouchers = true;
+  List<Voucher> _vouchers = const [];
+  Voucher? _selectedVoucher;
+
   @override
   void initState() {
     super.initState();
     _loadSlot();
+    _loadVouchers();
+  }
+
+  Future<void> _loadVouchers() async {
+    setState(() => _loadingVouchers = true);
+    try {
+      final userId = await currentUserId();
+      final vouchers = await _rewardService.fetchAvailableVouchers(userId);
+      if (!mounted) return;
+      setState(() {
+        _vouchers = vouchers;
+        _loadingVouchers = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _vouchers = const [];
+        _loadingVouchers = false;
+      });
+    }
+  }
+
+  void _openRewards() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const RewardsPage()),
+    ).then((_) => _loadVouchers());
   }
 
   List<String> get _departureDestination {
@@ -164,6 +202,9 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
     return total;
   }
 
+  double get displayFare =>
+      _selectedVoucher == null ? fare : _selectedVoucher!.previewFare(fare);
+
   String get ticketSummary {
     final parts = <String>[];
     for (final t in ticketTypes) {
@@ -192,8 +233,42 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
         counts: counts,
         fare: fare,
       );
+
+      var payableFare = fare;
+      String? freeTicketReference;
+
+      if (_selectedVoucher != null) {
+        final result = await _rewardService.applyVoucher(
+          redemptionId: _selectedVoucher!.redemptionId,
+          bookingId: bookingId,
+        );
+        payableFare = result.newTotal;
+        freeTicketReference = result.reference;
+      }
+
       if (!mounted) return;
       setState(() => _confirming = false);
+
+      if (payableFare <= 0) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(
+            builder: (context) => QrTicketPage(
+              initialData: QrTicketData(
+                reference: freeTicketReference!,
+                route: direction,
+                date: '${_weekdayLabel(selectedDate)}, ${selectedDate.day}/${selectedDate.month}',
+                time: selectedTime,
+                ticketSummary: ticketSummary,
+                fare: 0,
+              ),
+            ),
+          ),
+          (route) => route.isFirst,
+        );
+        return;
+      }
+
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -203,7 +278,7 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
             date: '${_weekdayLabel(selectedDate)}, ${selectedDate.day}/${selectedDate.month}',
             time: selectedTime,
             ticketSummary: ticketSummary,
-            fare: fare,
+            fare: payableFare,
           ),
         ),
       );
@@ -257,16 +332,29 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
                 const SizedBox(height: 8),
                 _buildTotalCrowdBar(),
               ],
+          const SizedBox(height: 20),
+          _buildLabel('Voucher'),
+          _buildVoucherSection(),
           const SizedBox(height: 24),
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(color: teal, borderRadius: BorderRadius.circular(14)),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Total Fare', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                Text('RM ${fare.toStringAsFixed(2)}',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Total Fare', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                    Text('RM ${displayFare.toStringAsFixed(2)}',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                  ],
+                ),
+                if (_selectedVoucher != null) ...[
+                  const SizedBox(height: 4),
+                  Text('Voucher applied: ${_selectedVoucher!.title}',
+                      style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                ],
               ],
             ),
           ),
@@ -414,6 +502,121 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
           ),
         );
       }).toList(),
+    );
+  }
+
+  Widget _buildVoucherSection() {
+    if (_loadingVouchers) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_vouchers.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(color: ice, borderRadius: BorderRadius.circular(12)),
+        child: Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'No vouchers yet.',
+                style: TextStyle(fontSize: 12, color: Colors.black54),
+              ),
+            ),
+            TextButton(onPressed: _openRewards, child: const Text('Redeem a reward')),
+          ],
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ..._vouchers.map(_buildVoucherTile),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(onPressed: _openRewards, child: const Text('Redeem another reward')),
+        ),
+      ],
+    );
+  }
+  Widget _buildVoucherTile(Voucher v) {
+    final selected = v.redemptionId == _selectedVoucher?.redemptionId;
+    final effect = v.isFree
+        ? 'Whole booking free'
+        : '− RM ${(v.discountAmount ?? 0).toStringAsFixed(2)} off';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: GestureDetector(
+        onTap: () => setState(() => _selectedVoucher = selected ? null : v),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: selected ? teal : ice,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                v.isFree ? Icons.confirmation_number : Icons.local_offer,
+                size: 20,
+                color: selected ? Colors.white : navy,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      v.title,
+                      style: TextStyle(
+                        color: selected ? Colors.white : navy,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      effect,
+                      style: TextStyle(
+                        color: selected ? Colors.white70 : Colors.black54,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (selected)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Text(
+                      'Applied',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    SizedBox(width: 6),
+                    Icon(Icons.close, size: 16, color: Colors.white),
+                  ],
+                )
+              else
+                const Text(
+                  'Apply',
+                  style: TextStyle(
+                    color: teal,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

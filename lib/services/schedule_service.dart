@@ -30,7 +30,6 @@ class ScheduleService {
         .eq('departure', departure)
         .eq('destination', destination)
         .eq('date', dateStr)
-        .eq('ferry_id', ferryId)
         .order('time');
 
     return (rows as List)
@@ -39,18 +38,17 @@ class ScheduleService {
   }
 
   Future<Map<String, int>> fetchBookedCounts(String scheduleId) async {
-    final rows = await _client
-        .from('ticket')
-        .select('type, quantity, booking!inner(schedule_id, status)')
-        .eq('booking.schedule_id', scheduleId)
-        .neq('booking.status', 'Cancelled');
+    final rows = await _client.rpc(
+      'get_booked_counts',
+      params: {'p_schedule_id': scheduleId},
+    );
 
     final counts = <String, int>{};
-    for (final row in rows) {
+    for (final row in (rows as List)) {
       final type = row['type'] as String;
       final key = ticketTypeKeys[type] ?? type;
-      final quantity = (row['quantity'] as num).toInt();
-      counts[key] = (counts[key] ?? 0) + quantity;
+      final total = (row['total_booked'] as num).toInt();
+      counts[key] = total;
     }
     return counts;
   }
