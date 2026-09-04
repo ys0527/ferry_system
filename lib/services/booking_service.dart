@@ -1,5 +1,4 @@
 import 'dart:math';
-
 import '../constants.dart';
 import '../models/booking_detail.dart';
 import '../models/booking_history_entry.dart';

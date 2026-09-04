@@ -3,7 +3,9 @@ import 'booking_payment.dart';
 import 'constants.dart';
 import 'models/ferry.dart';
 import 'models/schedule.dart';
+import 'services/crowd_density_service.dart';
 import 'services/schedule_service.dart';
+import 'widgets/crowd_density_badge.dart';
 
 class FerrySchedulePage extends StatefulWidget {
   const FerrySchedulePage({super.key});
@@ -19,6 +21,8 @@ class _FerryScheduleState extends State<FerrySchedulePage> {
   static const alert = Color(0xFFE0703E);
 
   final _scheduleService = ScheduleService();
+  final _crowdService = CrowdDensityService();
+  final Map<String, String> _crowdLevels = {};
 
   String selectedDestination = 'Butterworth';
 
@@ -58,6 +62,33 @@ class _FerryScheduleState extends State<FerrySchedulePage> {
       _resetExpandedPeriod();
       _scheduleFuture = _loadSchedule();
     });
+  }
+
+  Future<void> _loadCrowdLevelsFor(List<ScheduleSlot> entries) async {
+    if (_ferry == null) return;
+
+    final missingIds = entries
+        .map((e) => e.scheduleId)
+        .where((id) => !_crowdLevels.containsKey(id))
+        .toList();
+    if (missingIds.isEmpty) return;
+
+    try {
+      final totals = await _crowdService.fetchBookedTotals(missingIds);
+      final capacity = _ferry!.adultCap +
+          _ferry!.childCap +
+          _ferry!.bicycleCap +
+          _ferry!.motorcycleCap;
+
+      if (!mounted) return;
+      setState(() {
+        for (final id in missingIds) {
+          final booked = totals[id] ?? 0;
+          _crowdLevels[id] = _crowdService.levelFor(booked, capacity);
+        }
+      });
+    } catch (_) {
+    }
   }
 
   String _periodForHour(int hour) {
@@ -194,6 +225,21 @@ class _FerryScheduleState extends State<FerrySchedulePage> {
                 }
 
                 final groups = _groupByPeriod(visible);
+
+                List<ScheduleSlot>? expandedEntries;
+                for (final g in groups) {
+                  if (g.key == _expandedPeriod) {
+                    expandedEntries = g.value;
+                    break;
+                  }
+                }
+                if (expandedEntries != null) {
+                  final entriesToLoad = expandedEntries;
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _loadCrowdLevelsFor(entriesToLoad);
+                  });
+                }
+
                 return Column(
                   children: groups.expand((group) {
                     final expanded = group.key == _expandedPeriod;
@@ -333,6 +379,8 @@ class _FerryScheduleState extends State<FerrySchedulePage> {
     final delayed = entry.status == 'Delayed';
     final cancelled = entry.status == 'Cancelled';
     final displayTime = _formatTime(entry.time);
+    final crowdLevel = _crowdLevels[entry.scheduleId];
+
     return GestureDetector(
       onTap: cancelled
           ? null
@@ -355,31 +403,39 @@ class _FerryScheduleState extends State<FerrySchedulePage> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(displayTime,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: navy)),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'To $selectedDestination'
-                      '${_ferry != null ? ' \u00b7 Ferry ${_ferry!.ferryNum}' : ''}',
-                  style: const TextStyle(fontSize: 12, color: Colors.black54),
-                ),
+              Row(
+                children: [
+                  Text(displayTime,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: navy)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'To $selectedDestination',
+                      style: const TextStyle(fontSize: 12, color: Colors.black54),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: cancelled ? Colors.grey : (delayed ? alert : teal),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      _displayStatus(entry),
+                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Icon(Icons.chevron_right, color: navy, size: 20),
+                ],
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: cancelled ? Colors.grey : (delayed ? alert : teal),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  _displayStatus(entry),
-                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                ),
-              ),
-              const SizedBox(width: 6),
-              const Icon(Icons.chevron_right, color: navy, size: 20),
+              if (crowdLevel != null && !cancelled) ...[
+                const SizedBox(height: 8),
+                CrowdDensityBadge(level: crowdLevel),
+              ],
             ],
           ),
         ),
