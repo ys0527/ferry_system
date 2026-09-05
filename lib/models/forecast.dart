@@ -100,8 +100,8 @@ class SailingConditions {
 }
 
 class WeatherService {
-  static const double _lat = 5.41;
-  static const double _lon = 100.34;
+  static const double _lat = 5.3729;
+  static const double _lon = 100.2496;
 
   Future<GeneralForecast> fetchGeneralForecast() async {
     final uri = Uri.parse(

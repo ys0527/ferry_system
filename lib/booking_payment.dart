@@ -62,6 +62,22 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
     {'label': 'Two-Wheeler', 'keys': ['bicycle', 'motorcycle'], 'unit': 'space'},
   ];
 
+  // Only 'Passenger' (adult/child) is pooled -- they're just two price
+  // tiers for the same physical seat, so unused Child capacity can
+  // legitimately be sold as Adult and vice versa. Two-Wheeler (bicycle/
+  // motorcycle) stays as separate strict caps, since a motorcycle likely
+  // takes more deck space than a bicycle -- pooling them 1:1 could
+  // overpromise space if the capacity numbers represent physical area
+  // rather than a simple headcount.
+  Map<String, dynamic>? _pooledGroupFor(String key) {
+    for (final group in _crowdGroups) {
+      if (group['label'] == 'Passenger' && (group['keys'] as List).contains(key)) {
+        return group;
+      }
+    }
+    return null;
+  }
+
   bool _loadingSlot = true;
   bool _confirming = false;
   String? _slotError;
@@ -662,8 +678,22 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
   Widget _buildTicketRow(Map<String, dynamic> t) {
     final key = t['key'] as String;
     final count = counts[key] ?? 0;
-    final capacity = _ferry?.capacityFor(key) ?? 0;
-    final alreadyPlusSelected = (_booked[key] ?? 0) + count;
+
+    final pooledGroup = _pooledGroupFor(key);
+    int capacity;
+    int alreadyPlusSelected;
+    if (pooledGroup != null) {
+      final keys = (pooledGroup['keys'] as List).cast<String>();
+      capacity = 0;
+      alreadyPlusSelected = 0;
+      for (final k in keys) {
+        capacity += _ferry?.capacityFor(k) ?? 0;
+        alreadyPlusSelected += (_booked[k] ?? 0) + (counts[k] ?? 0);
+      }
+    } else {
+      capacity = _ferry?.capacityFor(key) ?? 0;
+      alreadyPlusSelected = (_booked[key] ?? 0) + count;
+    }
     final atCapacity = capacity > 0 && alreadyPlusSelected >= capacity;
 
     return Container(
@@ -703,7 +733,9 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(
-                'No more ${t['label']} tickets left on this sailing',
+                pooledGroup != null
+                    ? 'No more ${pooledGroup['label']} capacity left on this sailing'
+                    : 'No more ${t['label']} tickets left on this sailing',
                 style: const TextStyle(color: alert, fontSize: 10.5, fontWeight: FontWeight.w600),
               ),
             ),

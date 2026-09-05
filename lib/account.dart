@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'account_management.dart';
 import 'login.dart';
 import 'rewards.dart';
+import 'inbox.dart';
 
 class AccountPage extends StatefulWidget {
   const AccountPage({super.key});
@@ -34,6 +35,10 @@ class _AccountPageState extends State<AccountPage> {
     {
       'label': 'Help & Support',
       'icon': Icons.support_agent,
+    },
+    {
+      'label': 'Inbox',
+      'icon': Icons.notifications,
     },
     {
       'label': 'Logout',
@@ -232,6 +237,15 @@ class _AccountPageState extends State<AccountPage> {
 
       case 'Help & Support':
         await _showHelpSupport();
+        break;
+
+      case 'Inbox':
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const InboxPage(),
+          ),
+        );
         break;
 
       case 'Logout':

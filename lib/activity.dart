@@ -97,10 +97,10 @@ class _ActivityState extends State<ActivityPage> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _error != null
-                    ? _buildError()
-                    : bookings.isEmpty
-                        ? const Center(child: Text('No bookings here yet.'))
-                        : ListView.separated(
+                ? _buildError()
+                : bookings.isEmpty
+                ? const Center(child: Text('No bookings here yet.'))
+                : ListView.separated(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: bookings.length,
               separatorBuilder: (_, __) => const SizedBox(height: 10),

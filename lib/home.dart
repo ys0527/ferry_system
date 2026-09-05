@@ -5,11 +5,12 @@ import 'constants.dart';
 import 'models/schedule.dart';
 import 'services/crowd_density_service.dart';
 import 'services/schedule_service.dart';
+import 'services/notification_service.dart';
 import 'widgets/crowd_density_badge.dart';
 import 'ferry_schedule.dart';
 import 'qr_ticket.dart';
 import 'account.dart';
-import 'inbox.dart';
+import 'overall_reviews.dart';
 import 'booking_payment.dart';
 import 'rewards.dart';
 import 'activity.dart';
@@ -40,7 +41,16 @@ class _HomeState extends State<HomePage> {
   bool isLoading = true;
 
   String userName = '';
-  String language = 'EN';
+
+  static const _months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  String get _todayLabel {
+    final now = DateTime.now();
+    return '${now.day} ${_months[now.month - 1]} ${now.year}';
+  }
 
   ScheduleSlot? nextFerry;
   String nextFerryDirection = '';
@@ -49,11 +59,13 @@ class _HomeState extends State<HomePage> {
   int bottomNavIndex = 0;
 
   Timer? _minuteTicker;
+  final _notificationService = NotificationService();
 
   @override
   void initState() {
     super.initState();
     loadHomeData();
+    _notificationService.startListening();
     _minuteTicker = Timer.periodic(const Duration(seconds: 30), (_) {
       if (!mounted) return;
 
@@ -81,6 +93,7 @@ class _HomeState extends State<HomePage> {
   @override
   void dispose() {
     _minuteTicker?.cancel();
+    _notificationService.stopListening();
     super.dispose();
   }
 
@@ -166,8 +179,6 @@ class _HomeState extends State<HomePage> {
     });
   }
 
-  /// Finds the soonest not-yet-departed, not-cancelled sailing today,
-  /// checking both directions.
   Future<_NextSailing?> _findNextSailing() async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -224,36 +235,34 @@ class _HomeState extends State<HomePage> {
       backgroundColor: Colors.white,
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
-          : SafeArea(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            _buildHeader(),
-            Transform.translate(
-              offset: const Offset(0, -28),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildWeatherWidget(),
-                    const SizedBox(height: 12),
-                    _buildUpcomingScheduleCard(),
-                    const SizedBox(height: 24),
-                    Text('Services', style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 12),
-                    _buildServicesLayout(),
-                    const SizedBox(height: 24),
-                    Text('Events', style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 12),
-                    _buildEvents(),
-                    const SizedBox(height: 24),
-                  ],
-                ),
+          : ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          _buildHeader(),
+          Transform.translate(
+            offset: const Offset(0, -28),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildWeatherWidget(),
+                  const SizedBox(height: 12),
+                  _buildUpcomingScheduleCard(),
+                  const SizedBox(height: 24),
+                  Text('Services', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 12),
+                  _buildServicesLayout(),
+                  const SizedBox(height: 24),
+                  Text('Events', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 12),
+                  _buildEvents(),
+                  const SizedBox(height: 24),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: bottomNavIndex,
@@ -271,7 +280,7 @@ class _HomeState extends State<HomePage> {
               destination = const QrTicketPage();
               break;
             case 3:
-              destination = const InboxPage();
+              destination = const OverallReviewsPage();
               break;
             case 4:
               destination = const AccountPage();
@@ -292,7 +301,7 @@ class _HomeState extends State<HomePage> {
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
           BottomNavigationBarItem(icon: Icon(Icons.schedule), label: 'Schedule'),
           BottomNavigationBarItem(icon: Icon(Icons.qr_code_scanner), label: 'Ticket'),
-          BottomNavigationBarItem(icon: Icon(Icons.notifications), label: 'Inbox'),
+          BottomNavigationBarItem(icon: Icon(Icons.star_rate), label: 'Ratings'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Account'),
         ],
       ),
@@ -301,7 +310,6 @@ class _HomeState extends State<HomePage> {
 
   Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 56),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -313,60 +321,28 @@ class _HomeState extends State<HomePage> {
           bottomRight: Radius.circular(28),
         ),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 56),
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Hi,', style: TextStyle(color: Colors.white70, fontSize: 14)),
-              Text(
-                userName,
-                style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Hi,', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                  Text(
+                    userName,
+                    style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                ],
               ),
+              Text(_todayLabel, style: const TextStyle(color: Colors.white70, fontSize: 12)),
             ],
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              _buildLanguageToggle(),
-              const SizedBox(height: 6),
-              const Text('22 Jul 2026', style: TextStyle(color: Colors.white70, fontSize: 12)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLanguageToggle() {
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(20)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: ['BM', 'EN'].map((lang) {
-          final selected = lang == language;
-          return GestureDetector(
-            onTap: () => setState(() => language = lang),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: selected ? Colors.white : Colors.transparent,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Text(
-                lang,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: selected ? navy : Colors.white,
-                ),
-              ),
-            ),
-          );
-        }).toList(),
+        ),
       ),
     );
   }
