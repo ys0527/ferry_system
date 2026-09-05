@@ -155,8 +155,7 @@ class _WeatherSailingPageState extends State<WeatherSailingPage> {
         const SizedBox(height: 16),
         const Text(
           'General forecast from MET Malaysia (data.gov.my). Wave height and wind '
-              'speed from Open-Meteo, since MET Malaysia\'s open API does not currently '
-              'publish marine data.',
+              'speed from Open-Meteo.',
           style: TextStyle(fontSize: 10.5, color: Colors.black38, fontStyle: FontStyle.italic),
         ),
       ],

@@ -73,6 +73,11 @@ class WeatherWarning {
     final combined = '$titleEn $textEn'.toLowerCase();
     return _relevantAreaKeywords.any(combined.contains);
   }
+
+  bool get isMarineHazard {
+    final combined = titleEn.toLowerCase();
+    return combined.contains('strong wind') || combined.contains('rough sea');
+  }
 }
 
 class MarineConditions {
@@ -177,8 +182,8 @@ class WeatherService {
   }
 
   SailingStatus deriveStatus(MarineConditions marine, List<WeatherWarning> warnings) {
-    final hasSevereWarning = warnings.isNotEmpty;
-    if (hasSevereWarning || marine.waveHeightM >= 1.5) {
+    final hasMarineHazard = warnings.any((w) => w.isMarineHazard);
+    if (hasMarineHazard || marine.waveHeightM >= 1.5) {
       return SailingStatus.suspended;
     }
     if (marine.waveHeightM >= 0.8 || marine.windSpeedKmh >= 30) {
