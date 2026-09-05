@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'login.dart';
+import 'supabase_config.dart';
 
 class AccountManagementPage extends StatefulWidget {
   const AccountManagementPage({super.key});
@@ -114,6 +115,7 @@ class _AccountManagementState extends State<AccountManagementPage> {
   }
 
   void _cancelEditing() {
+    _formKey.currentState?.reset();
     setState(() {
       _nameController.text = _originalName;
       _emailController.text = _originalEmail;
@@ -218,13 +220,10 @@ class _AccountManagementState extends State<AccountManagementPage> {
     setState(() => _isSaving = true);
     try {
       final newName = _nameController.text.trim();
-      final newEmail = _emailController.text.trim().toLowerCase();
       final newPhone = _phoneController.text.trim();
-      final emailChanged = newEmail != (authUser.email?.toLowerCase() ?? '');
 
-      final authResponse = await Supabase.instance.client.auth.updateUser(
+      await Supabase.instance.client.auth.updateUser(
         UserAttributes(
-          email: emailChanged ? newEmail : null,
           data: {
             'name': newName,
             'phone_num': newPhone,
@@ -235,8 +234,6 @@ class _AccountManagementState extends State<AccountManagementPage> {
         //emailRedirectTo: '${Uri.base.origin}/?emailChanged=true',
       );
 
-      // While email confirmation is pending, this remains the old email.
-      final confirmedEmail = authResponse.user?.email ?? authUser.email;
       final newProfileUrl = await _uploadProfileImage(authUser.id);
 
       await Supabase.instance.client.from('users').update({
@@ -253,22 +250,14 @@ class _AccountManagementState extends State<AccountManagementPage> {
       setState(() {
         _profileUrl = newProfileUrl;
         _nameController.text = newName;
-        _emailController.text = emailChanged ? newEmail : (confirmedEmail ?? newEmail);
         _phoneController.text = newPhone;
-        if (emailChanged) _isEmailVerified = false;
         _newImageBytes = null;
         _newImageExtension = null;
         _isEditing = false;
         _rememberOriginalValues();
       });
 
-      if (emailChanged && confirmedEmail?.toLowerCase() != newEmail) {
-        _showMessage(
-          'Other changes saved. Verify $newEmail using the email sent by Supabase.',
-        );
-      } else {
-        _showMessage('Profile updated successfully');
-      }
+      _showMessage('Profile updated successfully');
     } on AuthException catch (error) {
       _showMessage(error.message, isError: true);
     } on StorageException catch (error) {
@@ -283,86 +272,6 @@ class _AccountManagementState extends State<AccountManagementPage> {
   }
 
   Future<void> _changePassword() async {
-    final formKey = GlobalKey<FormState>();
-    final currentPasswordController = TextEditingController();
-    final newPasswordController = TextEditingController();
-    final confirmPasswordController = TextEditingController();
-
-    final shouldChange = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Change Password'),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: currentPasswordController,
-                obscureText: true,
-                decoration: const InputDecoration(labelText: 'Current password'),
-                validator: (value) => value == null || value.isEmpty
-                    ? 'Current password is required'
-                    : null,
-              ),
-              TextFormField(
-                controller: newPasswordController,
-                obscureText: true,
-                decoration: const InputDecoration(labelText: 'New password'),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'New password is required';
-                  }
-                  if (value.length < 8) return 'Use at least 8 characters';
-                  if (!RegExp(r'[A-Z]').hasMatch(value) ||
-                      !RegExp(r'[a-z]').hasMatch(value) ||
-                      !RegExp(r'\d').hasMatch(value)) {
-                    return 'Include upper, lower, and number';
-                  }
-                  return null;
-                },
-              ),
-              TextFormField(
-                controller: confirmPasswordController,
-                obscureText: true,
-                decoration: const InputDecoration(labelText: 'Confirm password'),
-                validator: (value) => value != newPasswordController.text
-                    ? 'Passwords do not match'
-                    : null,
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (formKey.currentState?.validate() ?? false) {
-                Navigator.pop(dialogContext, true);
-              }
-            },
-            child: const Text('Change'),
-          ),
-        ],
-      ),
-    );
-
-    if (shouldChange != true) {
-      //currentPasswordController.dispose();
-      //newPasswordController.dispose();
-      //confirmPasswordController.dispose();
-      return;
-    }
-
-    final currentPassword = currentPasswordController.text;
-    final newPassword = newPasswordController.text;
-    //currentPasswordController.dispose();
-    //newPasswordController.dispose();
-    //confirmPasswordController.dispose();
-
     final authUser = Supabase.instance.client.auth.currentUser;
     final currentEmail = authUser?.email;
     if (authUser == null || currentEmail == null) {
@@ -370,16 +279,44 @@ class _AccountManagementState extends State<AccountManagementPage> {
       return;
     }
 
+    final shouldSend = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Change Password'),
+        content: Text(
+          'A secure password-reset link will be sent to $currentEmail.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Send Email'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldSend != true) return;
+
     setState(() => _isSaving = true);
     try {
-      await Supabase.instance.client.auth.signInWithPassword(
-        email: currentEmail,
-        password: currentPassword,
+      await Supabase.instance.client.auth.resetPasswordForEmail(
+        currentEmail,
+        //redirectTo: passwordResetRedirectUrl,
       );
-      await Supabase.instance.client.auth.updateUser(
-        UserAttributes(password: newPassword),
+
+      if (!mounted) return;
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => RecoveryOtpPage(email: currentEmail),
+        ),
       );
-      _showMessage('Password changed successfully');
+      _showMessage('Password reset email sent to $currentEmail');
     } on AuthException catch (error) {
       _showMessage(error.message, isError: true);
     } finally {
@@ -562,7 +499,7 @@ class _AccountManagementState extends State<AccountManagementPage> {
                 _buildLabel('Email'),
                 TextFormField(
                   controller: _emailController,
-                  enabled: _isEditing,
+                  enabled: false,
                   keyboardType: TextInputType.emailAddress,
                   decoration: _fieldDecoration(
                     Icons.email_outlined,

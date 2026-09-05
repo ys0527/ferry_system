@@ -3,7 +3,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'booking_payment.dart';
 
 class RewardsPage extends StatefulWidget {
-  const RewardsPage({super.key});
+  const RewardsPage({this.selectionMode = false, super.key});
+
+  final bool selectionMode;
 
   @override
   State<RewardsPage> createState() => _RewardsPageState();
@@ -51,7 +53,8 @@ class _RewardsPageState extends State<RewardsPage> {
       final redemptionRows = await Supabase.instance.client
           .from('redemption')
           .select(
-        'redemption_id, reward_id, type, points, description, created_at',
+        'redemption_id, reward_id, type, points, description, '
+            'created_at',
       )
           .eq('user_id', userId)
           .order('created_at', ascending: false);
@@ -64,16 +67,17 @@ class _RewardsPageState extends State<RewardsPage> {
             reward['reward_id'] as String: reward,
       };
 
-      final hiddenRewardIds = <String>{};
       final redeemedVouchers = <Map<String, dynamic>>[];
+
       for (final row in redemptions) {
         final rewardId = row['reward_id'];
         final type = row['type'];
-        if (rewardId is String &&
-            (type == 'Redeemed' || type == 'Expired')) {
-          hiddenRewardIds.add(rewardId);
 
+        if (rewardId is String &&
+            (type == 'Redeemed' ||
+                type == 'Used')) {
           final reward = rewardsById[rewardId];
+
           redeemedVouchers.add({
             ...row,
             'title': reward?['title'] ??
@@ -81,15 +85,15 @@ class _RewardsPageState extends State<RewardsPage> {
                 'Reward Voucher',
             'reward_description': reward?['description'],
             'reward_type': reward?['reward_type'],
+            'discount_amount': reward?['discount_amount'],
           });
         }
       }
 
+// All active rewards remain available for repeated redemption.
       final availableRewards = rewards
           .where(
-            (reward) =>
-        reward['is_active'] == true &&
-            !hiddenRewardIds.contains(reward['reward_id']),
+            (reward) => reward['is_active'] == true,
       )
           .toList();
 
@@ -163,9 +167,7 @@ class _RewardsPageState extends State<RewardsPage> {
   }
 
   IconData _iconFor(Map<String, dynamic> reward) {
-    return reward['reward_type'] == 'Free Ticket'
-        ? Icons.confirmation_number
-        : Icons.local_offer;
+    return Icons.local_offer;
   }
 
   String _descriptionFor(Map<String, dynamic> reward) {
@@ -195,7 +197,7 @@ class _RewardsPageState extends State<RewardsPage> {
       appBar: AppBar(
         backgroundColor: navy,
         foregroundColor: Colors.white,
-        title: const Text('Rewards'),
+        title: Text(widget.selectionMode ? 'Select Voucher' : 'Rewards'),
       ),
       body: RefreshIndicator(
         onRefresh: _loadRewards,
@@ -258,12 +260,22 @@ class _RewardsPageState extends State<RewardsPage> {
   }
 
   Widget _buildRedeemedVouchersPanel() {
+    final redeemedVouchers = _redeemedVouchers.where((voucher) {
+      return voucher['type']?.toString() == 'Redeemed';
+    }).toList();
+
+    final usedVouchers = _redeemedVouchers.where((voucher) {
+      return voucher['type']?.toString() == 'Used';
+    }).toList();
+
     return Card(
       elevation: 0,
       color: ice,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: navy.withOpacity(0.18)),
+        side: BorderSide(
+          color: navy.withOpacity(0.18),
+        ),
       ),
       child: ExpansionTile(
         leading: const CircleAvatar(
@@ -273,26 +285,106 @@ class _RewardsPageState extends State<RewardsPage> {
         ),
         title: const Text(
           'My Redeemed Vouchers',
-          style: TextStyle(fontWeight: FontWeight.bold, color: navy),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: navy,
+          ),
         ),
-        subtitle: Text('${_redeemedVouchers.length} voucher(s)'),
-        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        subtitle: Text(
+          '${_redeemedVouchers.length} voucher(s)',
+        ),
+        childrenPadding:
+        const EdgeInsets.fromLTRB(16, 0, 16, 16),
         children: [
-          if (_redeemedVouchers.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 18),
-              child: Text('You have not redeemed any vouchers yet.'),
-            )
-          else
-            ..._redeemedVouchers.map(_buildRedeemedVoucherTile),
+          DefaultTabController(
+            length: 2,
+            child: Column(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: TabBar(
+                    labelColor: Colors.white,
+                    unselectedLabelColor: navy,
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    indicator: BoxDecoration(
+                      color: navy,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    tabs: [
+                      Tab(
+                        text:
+                        'Redeemed (${redeemedVouchers.length})',
+                      ),
+                      Tab(
+                        text: 'Used (${usedVouchers.length})',
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 300,
+                  child: TabBarView(
+                    children: [
+                      _buildVoucherTabList(
+                        vouchers: redeemedVouchers,
+                        emptyMessage:
+                        'You have no available redeemed vouchers.',
+                      ),
+                      _buildVoucherTabList(
+                        vouchers: usedVouchers,
+                        emptyMessage:
+                        'You have not used any vouchers yet.',
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
+  Widget _buildVoucherTabList({
+    required List<Map<String, dynamic>> vouchers,
+    required String emptyMessage,
+  }) {
+    if (vouchers.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Text(
+            emptyMessage,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.grey,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: EdgeInsets.zero,
+      itemCount: vouchers.length,
+      separatorBuilder: (_, __) =>
+      const SizedBox(height: 10),
+      itemBuilder: (context, index) {
+        return _buildRedeemedVoucherTile(
+          vouchers[index],
+        );
+      },
+    );
+  }
+
   Widget _buildRedeemedVoucherTile(Map<String, dynamic> voucher) {
     final status = voucher['type']?.toString() ?? 'Redeemed';
-    final isExpired = status == 'Expired';
+    final isUsed = status == 'Used';
     final points = voucher['points'] as int? ?? 0;
     final redemptionId = voucher['redemption_id']?.toString() ?? '-';
 
@@ -325,15 +417,17 @@ class _RewardsPageState extends State<RewardsPage> {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: isExpired
-                      ? Colors.red.withOpacity(0.12)
+                  color: isUsed
+                      ? Colors.grey.withOpacity(0.15)
                       : Colors.green.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   status,
                   style: TextStyle(
-                    color: isExpired ? Colors.red : Colors.green.shade700,
+                    color: isUsed
+                        ? Colors.grey.shade700
+                        : Colors.green.shade700,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -348,15 +442,19 @@ class _RewardsPageState extends State<RewardsPage> {
           Align(
             alignment: Alignment.centerRight,
             child: FilledButton.icon(
-              onPressed: isExpired
+              onPressed: isUsed
                   ? null
                   : () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const BookingPaymentPage(),
-                  ),
-                );
+                if (widget.selectionMode) {
+                  Navigator.pop(context, voucher);
+                } else {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const BookingPaymentPage(),
+                    ),
+                  );
+                }
               },
               icon: const Icon(Icons.arrow_forward, size: 18),
               label: const Text('Use'),

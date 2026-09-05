@@ -16,6 +16,7 @@ class _AccountPageState extends State<AccountPage> {
   static const navy = Color(0xFF3472CA);
   static const teal = Color(0xFF1E93B8);
   static const ice = Color(0xFFEAF4F8);
+  static const logoutGreen = Color(0xFF2E7D32);
 
   String userName = 'Loading...';
   String? profileUrl;
@@ -109,8 +110,12 @@ class _AccountPageState extends State<AccountPage> {
               onPressed: () => Navigator.pop(dialogContext, false),
               child: const Text('Cancel'),
             ),
-            TextButton(
+            ElevatedButton(
               onPressed: () => Navigator.pop(dialogContext, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: logoutGreen,
+                foregroundColor: Colors.white,
+              ),
               child: const Text('Logout'),
             ),
           ],
@@ -120,6 +125,7 @@ class _AccountPageState extends State<AccountPage> {
 
     if (confirmed != true || !mounted) return;
 
+    final messenger = ScaffoldMessenger.of(context);
     await Supabase.instance.client.auth.signOut();
 
     if (!mounted) return;
@@ -130,6 +136,13 @@ class _AccountPageState extends State<AccountPage> {
         builder: (_) => const LoginPage(),
       ),
           (route) => false,
+    );
+
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Logged out successfully'),
+        backgroundColor: logoutGreen,
+      ),
     );
   }
 
@@ -311,7 +324,7 @@ class _AccountPageState extends State<AccountPage> {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Material(
-                  color: ice,
+                  color: isLogout ? const Color(0xFFE8F5E9) : ice,
                   borderRadius: BorderRadius.circular(14),
                   child: InkWell(
                     borderRadius: BorderRadius.circular(14),
@@ -325,7 +338,7 @@ class _AccountPageState extends State<AccountPage> {
                         children: [
                           Icon(
                             icon,
-                            color: isLogout ? Colors.redAccent : navy,
+                            color: isLogout ? logoutGreen : navy,
                           ),
                           const SizedBox(width: 16),
                           Expanded(
@@ -334,8 +347,11 @@ class _AccountPageState extends State<AccountPage> {
                               style: TextStyle(
                                 fontSize: 15,
                                 color: isLogout
-                                    ? Colors.redAccent
+                                    ? logoutGreen
                                     : Colors.black87,
+                                fontWeight: isLogout
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
                               ),
                             ),
                           ),

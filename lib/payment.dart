@@ -95,7 +95,7 @@ class _PaymentState extends State<PaymentPage> {
             ),
           ),
         ),
-        (route) => route.isFirst,
+            (route) => route.isFirst,
       );
     } on StripeException catch (e) {
       if (!mounted) return;

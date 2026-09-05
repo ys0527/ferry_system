@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:ferry_system/complete_profile.dart';
 import 'package:ferry_system/home.dart';
 import 'package:ferry_system/login.dart';
@@ -14,12 +16,50 @@ Future<void> main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  final _navigatorKey = GlobalKey<NavigatorState>();
+  //StreamSubscription<AuthState>? _authSubscription;
+  //late bool _recoveryPageShown;
+
+  @override
+  /*void initState() {
+    super.initState();
+    _recoveryPageShown = Uri.base.queryParameters['reset'] == 'true';
+
+    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen(
+          (authState) {
+        if (authState.event != AuthChangeEvent.passwordRecovery ||
+            _recoveryPageShown) {
+          return;
+        }
+
+        _recoveryPageShown = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _navigatorKey.currentState?.pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const ResetPasswordPage()),
+                (route) => false,
+          );
+        });
+      },
+    );
+  }*/
+
+  @override
+  /*void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
+  }*/
 
   Widget _initialPage() {
     final parameters = Uri.base.queryParameters;
-    if (parameters['reset'] == 'true') return const ResetPasswordPage();
+    //if (parameters['reset'] == 'true') return const ResetPasswordPage();
     if (parameters['confirmed'] == 'true') return const EmailConfirmedPage();
     if (parameters['emailChanged'] == 'true') {
       return const EmailChangedPage();
@@ -30,6 +70,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'FerryLink Penang',
       theme: ThemeData(

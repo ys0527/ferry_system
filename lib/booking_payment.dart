@@ -264,7 +264,7 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
               ),
             ),
           ),
-          (route) => route.isFirst,
+              (route) => route.isFirst,
         );
         return;
       }

@@ -3,6 +3,7 @@ import 'register.dart';
 import 'home.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'complete_profile.dart';
+import 'supabase_config.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -57,6 +58,15 @@ class _LoginState extends State<LoginPage> {
           .select('user_id')
           .eq('auth_id', authUser.id)
           .maybeSingle();
+
+      if (profile != null && authUser.emailConfirmedAt != null) {
+        try {
+          await Supabase.instance.client
+              .from('users')
+              .update({'is_verified': true})
+              .eq('auth_id', authUser.id);
+        } catch (_) {}
+      }
 
       if (!mounted) return;
 
@@ -137,11 +147,19 @@ class _LoginState extends State<LoginPage> {
 
     try {
       await Supabase.instance.client.auth.resetPasswordForEmail(
-        email,
-        //redirectTo: '${Uri.base.origin}/?reset=true',
+        //email,
+        //redirectTo: passwordResetRedirectUrl,
+        email
       );
 
       if (!mounted) return;
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => RecoveryOtpPage(email: email),
+        ),
+      );
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -331,6 +349,125 @@ class _LoginState extends State<LoginPage> {
   }
 }
 
+class RecoveryOtpPage extends StatefulWidget {
+  final String email;
+
+  const RecoveryOtpPage({
+    super.key,
+    required this.email,
+  });
+
+  @override
+  State<RecoveryOtpPage> createState() => _RecoveryOtpPageState();
+}
+
+class _RecoveryOtpPageState extends State<RecoveryOtpPage> {
+  final _otpController = TextEditingController();
+  bool _isVerifying = false;
+
+  @override
+  void dispose() {
+    _otpController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _verifyOtp() async {
+    final otp = _otpController.text.trim();
+
+    if (!RegExp(r'^\d{6}$').hasMatch(otp)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Enter a valid 6-digit code'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isVerifying = true);
+
+    try {
+      final response =
+      await Supabase.instance.client.auth.verifyOTP(
+        email: widget.email,
+        token: otp,
+        type: OtpType.recovery,
+      );
+
+      if (response.session == null) {
+        throw const AuthException('OTP verification failed');
+      }
+
+      if (!mounted) return;
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const ResetPasswordPage(),
+        ),
+      );
+    } on AuthException catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.message),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isVerifying = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Verify Reset Code'),
+        backgroundColor: const Color(0xFF3472CA),
+        foregroundColor: Colors.white,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Enter the 6-digit code sent to ${widget.email}.',
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: _otpController,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              decoration: const InputDecoration(
+                labelText: 'Verification code',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _isVerifying ? null : _verifyOtp,
+              child: _isVerifying
+                  ? const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                ),
+              )
+                  : const Text('Verify'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class ResetPasswordPage extends StatefulWidget {
   const ResetPasswordPage({super.key});
 
@@ -355,6 +492,17 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
 
   Future<void> _updatePassword() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+
+    if (Supabase.instance.client.auth.currentSession == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('The reset link is invalid or expired. Request a new email.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isSaving = true);
 
     try {
@@ -421,12 +569,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                   if (value == null || value.isEmpty) {
                     return 'New password is required';
                   }
-                  if (value.length < 8) return 'Use at least 8 characters';
-                  if (!RegExp(r'[A-Z]').hasMatch(value) ||
-                      !RegExp(r'[a-z]').hasMatch(value) ||
-                      !RegExp(r'\d').hasMatch(value)) {
-                    return 'Include uppercase, lowercase and a number';
-                  }
+                  if (value.length < 6) return 'Use at least 6 characters';
                   return null;
                 },
               ),

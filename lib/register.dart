@@ -40,9 +40,28 @@ class _RegisterState extends State<RegisterPage> {
     setState(() => _isSubmitting = true);
 
     try {
+      final email = _emailController.text.trim().toLowerCase();
+      final emailAlreadyUsed = await Supabase.instance.client.rpc(
+        'is_email_registered',
+        params: {'p_email': email},
+      );
+
+      if (emailAlreadyUsed == true) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'This email is already registered. Please log in instead.',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
       final response = await Supabase.instance.client.auth.signUp(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
+        email: email,
+        password: _passwordController.text,
         //emailRedirectTo: '${Uri.base.origin}/?confirmed=true',
       );
 
@@ -72,9 +91,15 @@ class _RegisterState extends State<RegisterPage> {
     } on AuthException catch (error) {
       if (!mounted) return;
 
+      final message = error.message.toLowerCase().contains(
+        'error sending confirmation email',
+      )
+          ? 'Account confirmation email could not be sent. Check the Supabase Auth logs and SMTP username, App Password, host, port, and sender email.'
+          : error.message;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(error.message),
+          content: Text(message),
           backgroundColor: Colors.red,
         ),
       );

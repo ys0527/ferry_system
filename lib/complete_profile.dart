@@ -116,6 +116,7 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
         'email': authUser.email,
         'phone_num': _phoneController.text.trim(),
         'profile': profileUrl,
+        'is_verified': authUser.emailConfirmedAt != null,
       });
 
       if (!mounted) return;
