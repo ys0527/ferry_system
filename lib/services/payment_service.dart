@@ -1,6 +1,7 @@
 import '../constants.dart';
 import '../supabase_config.dart';
 import 'current_user_service.dart';
+import 'reward_service.dart';
 
 class PaymentIntentInfo {
   const PaymentIntentInfo({
@@ -17,6 +18,7 @@ class PaymentIntentInfo {
 
 class PaymentService {
   final _client = supabase;
+  final _rewardService = RewardService();
 
   Future<PaymentIntentInfo> createPaymentIntent({
     required String bookingId,
@@ -65,14 +67,19 @@ class PaymentService {
     });
 
     await _awardPoints(userId, rewardPointsFor(amount));
+    await _finalizeVoucher(bookingId);
 
     return reference;
   }
+  
+  Future<void> _finalizeVoucher(String bookingId) async {
+    try {
+      await _rewardService.finalizeVoucher(bookingId);
+    } catch (e) {
+      return;
+    }
+  }
 
-  /// Credits whoever the booking actually belongs to — `booking.user_id`,
-  /// not necessarily whoever is logged in right now — so points always land
-  /// on the correct account even if the session changed between booking and
-  /// paying.
   Future<void> _awardPoints(String userId, int points) async {
     if (points <= 0) return;
     try {

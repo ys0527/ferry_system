@@ -6,6 +6,7 @@ class QrTicketData {
     required this.time,
     required this.ticketSummary,
     required this.fare,
+    required this.sailingAt,
   });
 
   final String reference;
@@ -14,4 +15,5 @@ class QrTicketData {
   final String time;
   final String ticketSummary;
   final double fare;
+  final DateTime sailingAt;
 }
