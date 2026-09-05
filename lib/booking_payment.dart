@@ -59,6 +59,11 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
 
   final Map<String, int> counts = {'adult': 1, 'child': 0, 'bicycle': 0, 'motorcycle': 0};
 
+  final List<Map<String, dynamic>> _crowdGroups = const [
+    {'label': 'Passenger', 'keys': ['adult', 'child'], 'unit': 'seat'},
+    {'label': 'Two-Wheeler', 'keys': ['bicycle', 'motorcycle'], 'unit': 'space'},
+  ];
+
   bool _loadingSlot = true;
   bool _confirming = false;
   String? _slotError;
@@ -361,7 +366,7 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
                 style: TextStyle(color: Colors.black54, fontSize: 12),
               )
             else ...[
-                ...ticketTypes.map(_buildCrowdBar),
+                ..._crowdGroups.map(_buildCrowdBar),
                 const SizedBox(height: 8),
                 _buildTotalCrowdBar(),
               ],
@@ -705,13 +710,27 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
     );
   }
 
-  Widget _buildCrowdBar(Map<String, dynamic> t) {
-    final key = t['key'] as String;
-    final capacity = _ferry?.capacityFor(key) ?? 0;
-    final baseBooked = _booked[key] ?? 0;
-    final booked = baseBooked + (counts[key] ?? 0);
+  Widget _buildCrowdBar(Map<String, dynamic> group) {
+    final keys = (group['keys'] as List).cast<String>();
+    int capacity = 0;
+    int booked = 0;
+    for (final key in keys) {
+      capacity += _ferry?.capacityFor(key) ?? 0;
+      booked += (_booked[key] ?? 0) + (counts[key] ?? 0);
+    }
     final ratio = capacity == 0 ? 0.0 : (booked / capacity).clamp(0.0, 1.0);
-    final color = ratio >= 0.85 ? alert : teal;
+    final Color color;
+    if (ratio >= 1.0) {
+      color = levelRed;
+    } else if (ratio >= 0.5) {
+      color = alert;
+    } else {
+      color = teal;
+    }
+
+    final remaining = (capacity - booked).clamp(0, capacity);
+    final unit = group['unit'] as String;
+    final unitLabel = remaining == 1 ? unit : '${unit}s';
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -721,8 +740,8 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(t['label'] as String, style: const TextStyle(fontSize: 12, color: navy, fontWeight: FontWeight.w600)),
-              Text('$booked / $capacity', style: const TextStyle(fontSize: 11, color: Colors.black54)),
+              Text(group['label'] as String, style: const TextStyle(fontSize: 12, color: navy, fontWeight: FontWeight.w600)),
+              Text('$remaining $unitLabel remaining', style: const TextStyle(fontSize: 11, color: Colors.black54)),
             ],
           ),
           const SizedBox(height: 4),
