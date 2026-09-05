@@ -416,8 +416,7 @@ class _FerryScheduleState extends State<FerrySchedulePage> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'To $selectedDestination'
-                          '${_ferry != null ? ' \u00b7 Ferry ${_ferry!.ferryNum}' : ''}',
+                      'To $selectedDestination',
                       style: const TextStyle(fontSize: 12, color: Colors.black54),
                     ),
                   ),
