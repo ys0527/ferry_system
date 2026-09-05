@@ -6,7 +6,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'login.dart';
-import 'supabase_config.dart';
 
 class AccountManagementPage extends StatefulWidget {
   const AccountManagementPage({super.key});
@@ -284,7 +283,7 @@ class _AccountManagementState extends State<AccountManagementPage> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Change Password'),
         content: Text(
-          'A secure password-reset link will be sent to $currentEmail.',
+          'A 6-digit password reset code will be sent to $currentEmail.',
         ),
         actions: [
           TextButton(
@@ -293,7 +292,7 @@ class _AccountManagementState extends State<AccountManagementPage> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Send Email'),
+            child: const Text('Send Code'),
           ),
         ],
       ),
@@ -305,7 +304,6 @@ class _AccountManagementState extends State<AccountManagementPage> {
     try {
       await Supabase.instance.client.auth.resetPasswordForEmail(
         currentEmail,
-        //redirectTo: passwordResetRedirectUrl,
       );
 
       if (!mounted) return;
@@ -313,10 +311,13 @@ class _AccountManagementState extends State<AccountManagementPage> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => RecoveryOtpPage(email: currentEmail),
+          builder: (_) => RecoveryOtpPage(
+            email: currentEmail,
+            fromProfileManagement: true,
+          ),
         ),
       );
-      _showMessage('Password reset email sent to $currentEmail');
+      _showMessage('Password reset code sent to $currentEmail');
     } on AuthException catch (error) {
       _showMessage(error.message, isError: true);
     } finally {

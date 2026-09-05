@@ -3,7 +3,6 @@ import 'register.dart';
 import 'home.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'complete_profile.dart';
-import 'supabase_config.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -147,9 +146,7 @@ class _LoginState extends State<LoginPage> {
 
     try {
       await Supabase.instance.client.auth.resetPasswordForEmail(
-        //email,
-        //redirectTo: passwordResetRedirectUrl,
-        email
+          email
       );
 
       if (!mounted) return;
@@ -351,10 +348,12 @@ class _LoginState extends State<LoginPage> {
 
 class RecoveryOtpPage extends StatefulWidget {
   final String email;
+  final bool fromProfileManagement;
 
   const RecoveryOtpPage({
     super.key,
     required this.email,
+    this.fromProfileManagement = false,
   });
 
   @override
@@ -403,7 +402,9 @@ class _RecoveryOtpPageState extends State<RecoveryOtpPage> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => const ResetPasswordPage(),
+          builder: (_) => ResetPasswordPage(
+            fromProfileManagement: widget.fromProfileManagement,
+          ),
         ),
       );
     } on AuthException catch (error) {
@@ -469,7 +470,12 @@ class _RecoveryOtpPageState extends State<RecoveryOtpPage> {
 }
 
 class ResetPasswordPage extends StatefulWidget {
-  const ResetPasswordPage({super.key});
+  final bool fromProfileManagement;
+
+  const ResetPasswordPage({
+    super.key,
+    this.fromProfileManagement = false,
+  });
 
   @override
   State<ResetPasswordPage> createState() => _ResetPasswordPageState();
@@ -482,6 +488,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
   final _confirmPasswordController = TextEditingController();
   bool _isSaving = false;
   bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
 
   @override
   void dispose() {
@@ -533,6 +540,29 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
     }
   }
 
+  Future<void> _cancelPasswordReset() async {
+    if (widget.fromProfileManagement) {
+      if (!mounted) return;
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const HomePage()),
+            (route) => false,
+      );
+      return;
+    }
+
+    await Supabase.instance.client.auth.signOut();
+
+    if (!mounted) return;
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginPage()),
+          (route) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -569,32 +599,94 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                   if (value == null || value.isEmpty) {
                     return 'New password is required';
                   }
-                  if (value.length < 6) return 'Use at least 6 characters';
+
+                  if (value.length < 8) {
+                    return 'Use at least 8 characters';
+                  }
+
+                  if (RegExp(r'\s').hasMatch(value)) {
+                    return 'Password cannot contain spaces';
+                  }
+
+                  if (!RegExp(r'[A-Z]').hasMatch(value)) {
+                    return 'Include at least one uppercase letter';
+                  }
+
+                  if (!RegExp(r'[a-z]').hasMatch(value)) {
+                    return 'Include at least one lowercase letter';
+                  }
+
+                  if (!RegExp(r'\d').hasMatch(value)) {
+                    return 'Include at least one number';
+                  }
+
+                  if (!RegExp(r'[!@#$%^&*(),.?":{}|<>]')
+                      .hasMatch(value)) {
+                    return 'Include at least one special character';
+                  }
+
                   return null;
                 },
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _confirmPasswordController,
-                obscureText: true,
-                decoration: const InputDecoration(
+                obscureText: _obscureConfirmPassword,
+                decoration: InputDecoration(
                   labelText: 'Confirm new password',
-                  border: OutlineInputBorder(),
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    onPressed: () {
+                      setState(() {
+                        _obscureConfirmPassword =
+                        !_obscureConfirmPassword;
+                      });
+                    },
+                    icon: Icon(
+                      _obscureConfirmPassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                    ),
+                  ),
                 ),
-                validator: (value) => value != _passwordController.text
-                    ? 'Passwords do not match'
-                    : null,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please confirm your new password';
+                  }
+
+                  if (value != _passwordController.text) {
+                    return 'Passwords do not match';
+                  }
+
+                  return null;
+                },
               ),
               const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: _isSaving ? null : _updatePassword,
-                child: _isSaving
-                    ? const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-                    : const Text('Update Password'),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed:
+                      _isSaving ? null : _cancelPasswordReset,
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _isSaving ? null : _updatePassword,
+                      child: _isSaving
+                          ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                        ),
+                      )
+                          : const Text('Update Password'),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

@@ -574,10 +574,6 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         ..._vouchers.map(_buildVoucherTile),
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton(onPressed: _openRewards, child: const Text('Redeem another reward')),
-        ),
       ],
     );
   }

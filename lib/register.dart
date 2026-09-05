@@ -171,8 +171,35 @@ class _RegisterState extends State<RegisterPage> {
                           ),
                         ),
                         validator: (value) {
-                          if (value == null || value.isEmpty) return 'Password is required';
-                          if (value.length < 6) return 'Must be at least 6 characters';
+                          if (value == null || value.isEmpty) {
+                            return 'Password is required';
+                          }
+
+                          if (value.length < 8) {
+                            return 'Use at least 8 characters';
+                          }
+
+                          if (RegExp(r'\s').hasMatch(value)) {
+                            return 'Password cannot contain spaces';
+                          }
+
+                          if (!RegExp(r'[A-Z]').hasMatch(value)) {
+                            return 'Include at least one uppercase letter';
+                          }
+
+                          if (!RegExp(r'[a-z]').hasMatch(value)) {
+                            return 'Include at least one lowercase letter';
+                          }
+
+                          if (!RegExp(r'\d').hasMatch(value)) {
+                            return 'Include at least one number';
+                          }
+
+                          if (!RegExp(r'[!@#$%^&*(),.?":{}|<>]')
+                              .hasMatch(value)) {
+                            return 'Include at least one special character';
+                          }
+
                           return null;
                         },
                       ),
