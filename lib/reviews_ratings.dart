@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'review_window.dart';
 import 'services/current_user_service.dart';
+import 'overall_reviews.dart';
 
 class Review {
   final String id;
@@ -87,15 +88,24 @@ class _ReviewsRatingsState extends State<ReviewsRatingsPage> {
   bool _alreadyReviewed = false;
   bool _isDeleting = false;
 
+  // Set when the user taps "Edit" on their own existing review -- the form
+  // stays the same widget, just pre-filled and routed to _updateReview()
+  // instead of _addReview() on submit.
   bool _isEditing = false;
   String? _editingReviewId;
 
+  // The app's own U-code user id (e.g. "U0001"), resolved from the auth
+  // UID via services/current_user_service.dart. This is what's actually
+  // stored in review.user_id -- NOT the raw Supabase Auth UUID.
   String? _currentUserId;
 
+  // The signed-in user's own review for THIS booking specifically -- not
+  // just any review they've left on the route, since Edit/Delete apply to
+  // one trip at a time.
   Review? get _myReview {
     if (_currentUserId == null) return null;
     for (final r in _reviews) {
-      if (r.userId == _currentUserId) return r;
+      if (r.userId == _currentUserId && r.bookingId == widget.bookingId) return r;
     }
     return null;
   }
@@ -119,13 +129,36 @@ class _ReviewsRatingsState extends State<ReviewsRatingsPage> {
     setState(() => _isLoading = true);
 
     try {
-      final response = await supabase
+      // Fix: was `.eq('booking_id', widget.bookingId)` -- but only the
+      // booking's owner can ever attach a review to their own booking_id
+      // (per the insert RLS policy), so that filter could only ever
+      // return the current user's own review, never anyone else's.
+      // "What other riders say" needs every review across every booking
+      // on the same route. There's no `route` column on `booking` --
+      // it's a Dart-side string built from schedule.departure +
+      // schedule.destination -- so this splits tripLabel back apart and
+      // joins two hops through `schedule` to filter on the real columns.
+      final routeParts = widget.tripLabel?.split(' → ');
+      final departure = (routeParts != null && routeParts.length == 2) ? routeParts[0] : null;
+      final destination = (routeParts != null && routeParts.length == 2) ? routeParts[1] : null;
+
+      final response = (departure != null && destination != null)
+          ? await supabase
+          .from('review')
+          .select('*, booking!inner(schedule!inner(departure, destination))')
+          .eq('booking.schedule.departure', departure)
+          .eq('booking.schedule.destination', destination)
+          .order('created_at', ascending: false)
+          : await supabase
           .from('review')
           .select()
           .eq('booking_id', widget.bookingId)
           .order('created_at', ascending: false);
 
       final rawReviews = (response as List).map((item) => Review.fromJson(item)).toList();
+      // Fix: was `supabase.auth.currentUser?.id`, the raw Supabase Auth
+      // UUID -- but review.user_id stores the app's own "U0001"-style
+      // code from the `users` table, not the auth UID directly.
       final myUserId = await currentUserId();
 
       if (rawReviews.isEmpty) {
@@ -142,7 +175,12 @@ class _ReviewsRatingsState extends State<ReviewsRatingsPage> {
       final reviewIds = rawReviews.map((r) => r.id).toList();
 
       final results = await Future.wait([
-        supabase.from('users').select('user_id, name').inFilter('user_id', userIds),
+        // Uses a security-definer RPC instead of querying `users`
+        // directly -- `users` RLS only allows reading your own row, and
+        // widening that to all rows would also expose email/phone_num to
+        // every signed-in user just to show a display name. This
+        // function returns only user_id + name, nothing else.
+        supabase.rpc('get_display_names', params: {'uids': userIds}),
         supabase.from('review_photo').select('review_id, file_name').inFilter('review_id', reviewIds),
       ]);
 
@@ -170,7 +208,10 @@ class _ReviewsRatingsState extends State<ReviewsRatingsPage> {
       setState(() {
         _reviews = reviews;
         _currentUserId = myUserId;
-        _alreadyReviewed = reviews.any((r) => r.userId == myUserId);
+        // Fix: was checking any review by this user across the whole
+        // route -- must stay scoped to THIS booking, since one user can
+        // legitimately review multiple separate trips on the same route.
+        _alreadyReviewed = reviews.any((r) => r.userId == myUserId && r.bookingId == widget.bookingId);
       });
     } catch (e) {
       if (!mounted) return;
@@ -183,6 +224,9 @@ class _ReviewsRatingsState extends State<ReviewsRatingsPage> {
   }
 
   Future<void> _addReview() async {
+    // Fix: was `supabase.auth.currentUser?.id` (the 36-character auth
+    // UUID) inserted directly into a `varchar(5)` column that expects
+    // "U0001"-style codes -- caused a Postgres "value too long" error.
     String myUserId;
     try {
       myUserId = _currentUserId ?? await currentUserId();
@@ -292,6 +336,8 @@ class _ReviewsRatingsState extends State<ReviewsRatingsPage> {
 
       final updated = Review.fromJson((response as List).first);
 
+      // Newly attached photos during an edit are additive -- this doesn't
+      // remove any photos already uploaded from a previous submission.
       if (_attachedPhotos.isNotEmpty) {
         await _uploadPhotos(reviewId);
       }
@@ -300,6 +346,9 @@ class _ReviewsRatingsState extends State<ReviewsRatingsPage> {
       setState(() {
         final index = _reviews.indexWhere((r) => r.id == updated.id);
         if (index != -1) {
+          // The update response doesn't include reviewerName/photoUrls
+          // (those come from the join in _fetchReviews), so carry them
+          // over from what's already in state.
           _reviews[index] = updated.copyWith(
             reviewerName: _reviews[index].reviewerName,
             photoUrls: _reviews[index].photoUrls,
@@ -352,6 +401,9 @@ class _ReviewsRatingsState extends State<ReviewsRatingsPage> {
   Future<void> _deleteReview(String reviewId) async {
     setState(() => _isDeleting = true);
     try {
+      // Fetch the file names BEFORE deleting the review -- the
+      // review_photo rows cascade-delete along with it (on delete cascade
+      // in the schema), so this list would be gone if queried after.
       final photoRows = await supabase
           .from('review_photo')
           .select('file_name')
@@ -363,6 +415,9 @@ class _ReviewsRatingsState extends State<ReviewsRatingsPage> {
 
       await supabase.from('review').delete().eq('review_id', reviewId);
 
+      // Remove the actual files from Storage now that nothing references
+      // them. Best-effort: if this fails, the DB rows are already gone,
+      // so surface it but don't treat the whole delete as failed.
       if (fileNames.isNotEmpty) {
         try {
           await supabase.storage.from('review-photos').remove(fileNames);
@@ -574,6 +629,18 @@ class _ReviewsRatingsState extends State<ReviewsRatingsPage> {
       appBar: AppBar(
         backgroundColor: navy,
         title: const Text('Reviews & Ratings'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.list_alt),
+            tooltip: 'All reviews',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const OverallReviewsPage()),
+              );
+            },
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),

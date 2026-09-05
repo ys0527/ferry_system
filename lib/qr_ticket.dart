@@ -8,9 +8,6 @@ import 'widgets/ticket_qr_card.dart';
 class QrTicketPage extends StatefulWidget {
   const QrTicketPage({this.initialData, super.key});
 
-  /// Passed in right after a successful payment. When omitted (e.g. the
-  /// bottom-nav "QR" tab), the page fetches the user's latest confirmed
-  /// ticket instead.
   final QrTicketData? initialData;
 
   @override

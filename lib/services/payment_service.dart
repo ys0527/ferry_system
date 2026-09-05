@@ -1,6 +1,7 @@
 import '../constants.dart';
 import '../supabase_config.dart';
 import 'current_user_service.dart';
+import 'notification_service.dart';
 import 'reward_service.dart';
 
 class PaymentIntentInfo {
@@ -68,6 +69,19 @@ class PaymentService {
 
     await _awardPoints(userId, rewardPointsFor(amount));
     await _finalizeVoucher(bookingId);
+
+    // Best-effort: a failed notification shouldn't undo a successful
+    // payment that's already been recorded above.
+    try {
+      final notificationService = NotificationService();
+      await notificationService.notifyBookingConfirmed(userId: userId, reference: reference);
+      final points = rewardPointsFor(amount);
+      if (points > 0) {
+        await notificationService.notifyPointsEarned(userId: userId, points: points);
+      }
+    } catch (_) {
+      // Ignore -- the booking and points are already committed.
+    }
 
     return reference;
   }

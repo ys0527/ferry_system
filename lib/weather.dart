@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'models/forecast.dart';
+import 'services/notification_service.dart';
+
 
 class WeatherSailingPage extends StatefulWidget {
   const WeatherSailingPage({super.key});
@@ -40,11 +42,28 @@ class _WeatherSailingPageState extends State<WeatherSailingPage> {
         conditions = result;
         isLoading = false;
       });
+      if (result.status != SailingStatus.normal) {
+        _sendAdvisoryNotification(result);
+      }
     } catch (e) {
       setState(() {
         errorMessage = 'Could not load live weather data. Pull down to retry.';
         isLoading = false;
       });
+    }
+  }
+
+  // Best-effort and non-blocking -- a failed notification insert shouldn't
+  // affect the weather screen itself, which already has the data it needs.
+  Future<void> _sendAdvisoryNotification(SailingConditions c) async {
+    try {
+      final title = _statusLabel(c.status);
+      final body = c.warnings.isNotEmpty
+          ? c.warnings.first.titleEn
+          : 'Wave height ${c.marine.waveHeightM.toStringAsFixed(1)}m, wind ${c.marine.windSpeedKmh.toStringAsFixed(0)}km/h on the Georgetown–Butterworth crossing.';
+      await NotificationService().notifyWeatherAdvisoryIfNew(title: title, body: body);
+    } catch (_) {
+      // Ignore -- not critical to the screen's own function.
     }
   }
 
@@ -138,7 +157,8 @@ class _WeatherSailingPageState extends State<WeatherSailingPage> {
         const SizedBox(height: 16),
         const Text(
           'General forecast from MET Malaysia (data.gov.my). Wave height and wind '
-              'speed from Open-Meteo.',
+              'speed from Open-Meteo, since MET Malaysia\'s open API does not currently '
+              'publish marine data.',
           style: TextStyle(fontSize: 10.5, color: Colors.black38, fontStyle: FontStyle.italic),
         ),
       ],
