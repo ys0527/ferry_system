@@ -662,34 +662,51 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
   Widget _buildTicketRow(Map<String, dynamic> t) {
     final key = t['key'] as String;
     final count = counts[key] ?? 0;
+    final capacity = _ferry?.capacityFor(key) ?? 0;
+    final alreadyPlusSelected = (_booked[key] ?? 0) + count;
+    final atCapacity = capacity > 0 && alreadyPlusSelected >= capacity;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(color: ice, borderRadius: BorderRadius.circular(12)),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(t['icon'] as IconData, color: navy, size: 20),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(t['label'] as String,
-                    style: const TextStyle(color: navy, fontWeight: FontWeight.w600, fontSize: 13)),
-                Text('RM ${(t['price'] as double).toStringAsFixed(2)}',
-                    style: const TextStyle(color: Colors.black54, fontSize: 11)),
-              ],
+          Row(
+            children: [
+              Icon(t['icon'] as IconData, color: navy, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(t['label'] as String,
+                        style: const TextStyle(color: navy, fontWeight: FontWeight.w600, fontSize: 13)),
+                    Text('RM ${(t['price'] as double).toStringAsFixed(2)}',
+                        style: const TextStyle(color: Colors.black54, fontSize: 11)),
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: count > 0 ? () => setState(() => counts[key] = count - 1) : null,
+                icon: const Icon(Icons.remove_circle_outline, color: navy),
+              ),
+              Text('$count', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              IconButton(
+                onPressed: atCapacity ? null : () => setState(() => counts[key] = count + 1),
+                icon: const Icon(Icons.add_circle_outline, color: navy),
+              ),
+            ],
+          ),
+          if (atCapacity)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'No more ${t['label']} tickets left on this sailing',
+                style: const TextStyle(color: alert, fontSize: 10.5, fontWeight: FontWeight.w600),
+              ),
             ),
-          ),
-          IconButton(
-            onPressed: count > 0 ? () => setState(() => counts[key] = count - 1) : null,
-            icon: const Icon(Icons.remove_circle_outline, color: navy),
-          ),
-          Text('$count', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-          IconButton(
-            onPressed: () => setState(() => counts[key] = count + 1),
-            icon: const Icon(Icons.add_circle_outline, color: navy),
-          ),
         ],
       ),
     );
