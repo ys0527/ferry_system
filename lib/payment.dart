@@ -3,6 +3,7 @@ import 'package:flutter_stripe/flutter_stripe.dart';
 import 'constants.dart';
 import 'models/qr_ticket_data.dart';
 import 'qr_ticket.dart';
+import 'services/booking_service.dart';
 import 'services/payment_service.dart';
 
 class PaymentPage extends StatefulWidget {
@@ -33,10 +34,18 @@ class _PaymentState extends State<PaymentPage> {
   static const ice = Color(0xFFEAF4F8);
 
   final _paymentService = PaymentService();
+  final _bookingService = BookingService();
 
   bool _isPaying = false;
 
   bool _sheetOpen = false;
+
+  bool _paymentSucceeded = false;
+
+  void _cancelAbandonedBooking() {
+    if (_paymentSucceeded) return;
+    _bookingService.cancelBooking(widget.bookingId);
+  }
 
   Future<void> _payWithPaymentSheet() async {
     setState(() => _isPaying = true);
@@ -81,6 +90,7 @@ class _PaymentState extends State<PaymentPage> {
       await _showPointsEarnedDialog();
 
       if (!mounted) return;
+      _paymentSucceeded = true;
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
@@ -156,81 +166,89 @@ class _PaymentState extends State<PaymentPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: navy,
-        title: const Text('Payment'),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: ice, borderRadius: BorderRadius.circular(14)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Order Summary',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: navy)),
-                const SizedBox(height: 10),
-                _summaryRow('Route', widget.route),
-                _summaryRow('Date', widget.date),
-                _summaryRow('Time', widget.time),
-                _summaryRow('Tickets', widget.ticketSummary),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(color: ice, borderRadius: BorderRadius.circular(12)),
-            child: const Row(
-              children: [
-                Icon(Icons.lock, size: 16, color: navy),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    "You'll be taken to Stripe's secure checkout to enter your card details.",
-                    style: TextStyle(fontSize: 12, color: navy),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: navy, borderRadius: BorderRadius.circular(14)),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Total to Pay', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                Text('RM ${widget.fare.toStringAsFixed(2)}',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton(
-              onPressed: (_isPaying || _sheetOpen) ? null : _payWithPaymentSheet,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: teal,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) {
+          _cancelAbandonedBooking();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          backgroundColor: navy,
+          title: const Text('Payment'),
+        ),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(color: ice, borderRadius: BorderRadius.circular(14)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Order Summary',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: navy)),
+                  const SizedBox(height: 10),
+                  _summaryRow('Route', widget.route),
+                  _summaryRow('Date', widget.date),
+                  _summaryRow('Time', widget.time),
+                  _summaryRow('Tickets', widget.ticketSummary),
+                ],
               ),
-              child: _isPaying
-                  ? const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
-              )
-                  : const Text('Pay Now', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
             ),
-          ),
-        ],
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(color: ice, borderRadius: BorderRadius.circular(12)),
+              child: const Row(
+                children: [
+                  Icon(Icons.lock, size: 16, color: navy),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      "You'll be taken to Stripe's secure checkout to enter your card details.",
+                      style: TextStyle(fontSize: 12, color: navy),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(color: navy, borderRadius: BorderRadius.circular(14)),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Total to Pay', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  Text('RM ${widget.fare.toStringAsFixed(2)}',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: (_isPaying || _sheetOpen) ? null : _payWithPaymentSheet,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: teal,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                ),
+                child: _isPaying
+                    ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                )
+                    : const Text('Pay Now', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -25,11 +25,11 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   final _navigatorKey = GlobalKey<NavigatorState>();
-  //StreamSubscription<AuthState>? _authSubscription;
-  //late bool _recoveryPageShown;
+  StreamSubscription<AuthState>? _authSubscription;
+  late bool _recoveryPageShown;
 
   @override
-  /*void initState() {
+  void initState() {
     super.initState();
     _recoveryPageShown = Uri.base.queryParameters['reset'] == 'true';
 
@@ -49,13 +49,13 @@ class _MyAppState extends State<MyApp> {
         });
       },
     );
-  }*/
+  }
 
   @override
-  /*void dispose() {
+  void dispose() {
     _authSubscription?.cancel();
     super.dispose();
-  }*/
+  }
 
   Widget _initialPage() {
     final parameters = Uri.base.queryParameters;

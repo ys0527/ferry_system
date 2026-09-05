@@ -20,6 +20,8 @@ class CrowdDensityBadge extends StatelessWidget {
     }
   }
 
+  IconData get _icon => level == 'Full' ? Icons.block : Icons.people_alt;
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -28,7 +30,7 @@ class CrowdDensityBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.people_alt, color: Colors.white, size: 11),
+          Icon(_icon, color: Colors.white, size: 11),
           const SizedBox(width: 4),
           Text(
             level,

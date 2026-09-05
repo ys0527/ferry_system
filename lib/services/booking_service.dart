@@ -12,7 +12,7 @@ String _generateReference(DateTime now) {
   final random = Random.secure();
   final suffix = List.generate(
     5,
-    (_) => alphabet[random.nextInt(alphabet.length)],
+        (_) => alphabet[random.nextInt(alphabet.length)],
   ).join();
   final yy = (now.year % 100).toString().padLeft(2, '0');
   final mm = now.month.toString().padLeft(2, '0');
@@ -60,12 +60,12 @@ class BookingService {
     final bookingRow = await _client
         .from('booking')
         .insert({
-          'reference': _generateReference(DateTime.now()),
-          'status': 'Pending',
-          'total': fare,
-          'user_id': userId,
-          'schedule_id': scheduleId,
-        })
+      'reference': _generateReference(DateTime.now()),
+      'status': 'Pending',
+      'total': fare,
+      'user_id': userId,
+      'schedule_id': scheduleId,
+    })
         .select()
         .single();
     final bookingId = bookingRow['booking_id'] as String;
@@ -91,12 +91,20 @@ class BookingService {
     return bookingId;
   }
 
+  Future<void> cancelBooking(String bookingId) async {
+    await _client
+        .from('booking')
+        .update({'status': 'Cancelled'})
+        .eq('booking_id', bookingId)
+        .eq('status', 'Pending');
+  }
+
   Future<List<BookingHistoryEntry>> fetchBookingHistory(String userId) async {
     final rows = await _client
         .from('booking')
         .select(
-          'booking_id, reference, total, schedule:schedule_id(departure, destination, date, time, ferry:ferry_id(ferry_num)), ticket(type, quantity)',
-        )
+      'booking_id, reference, total, schedule:schedule_id(departure, destination, date, time, ferry:ferry_id(ferry_num)), ticket(type, quantity)',
+    )
         .eq('user_id', userId)
         .inFilter('status', ['Confirmed', 'Completed']);
 
@@ -107,11 +115,11 @@ class BookingService {
     final row = await _client
         .from('booking')
         .select(
-          'booking_id, reference, status, total, created_at, '
+      'booking_id, reference, status, total, created_at, '
           'schedule:schedule_id(departure, destination, date, time, status, delay_time, ferry:ferry_id(ferry_num)), '
           'ticket(type, quantity, unit_price, subtotal), '
           'payment(method, total_amount, status, created_at, stripe_payment_intent_id)',
-        )
+    )
         .eq('booking_id', bookingId)
         .single();
 
@@ -122,8 +130,8 @@ class BookingService {
     final row = await _client
         .from('booking')
         .select(
-          'reference, qr_code, total, created_at, schedule:schedule_id(departure, destination, date, time), ticket(type, quantity)',
-        )
+      'reference, qr_code, total, created_at, schedule:schedule_id(departure, destination, date, time), ticket(type, quantity)',
+    )
         .eq('user_id', userId)
         .eq('status', 'Confirmed')
         .order('created_at', ascending: false)

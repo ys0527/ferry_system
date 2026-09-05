@@ -8,6 +8,7 @@ import 'payment.dart';
 import 'qr_ticket.dart';
 import 'rewards.dart';
 import 'services/booking_service.dart';
+import 'services/crowd_density_service.dart';
 import 'services/current_user_service.dart';
 import 'services/reward_service.dart';
 import 'services/schedule_service.dart';
@@ -40,6 +41,7 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
   final _scheduleService = ScheduleService();
   final _bookingService = BookingService();
   final _rewardService = RewardService();
+  final _crowdService = CrowdDensityService();
 
   late String direction = widget.initialDirection ?? 'Georgetown Terminal → Butterworth';
   late final List<DateTime> availableDates =
@@ -64,6 +66,8 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
   ScheduleSlot? _schedule;
   Ferry? _ferry;
   Map<String, int> _booked = {};
+
+  Map<String, String> _slotCrowdLevels = {};
 
   bool _loadingVouchers = true;
   List<Voucher> _vouchers = const [];
@@ -125,6 +129,28 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
     return entries.where((e) => _entryDateTime(e).isAfter(now)).toList();
   }
 
+  Future<Map<String, String>> _loadSlotCrowdLevels(
+      List<ScheduleSlot> slots,
+      Ferry ferry,
+      ) async {
+    if (slots.isEmpty) return {};
+    try {
+      final ids = slots.map((s) => s.scheduleId).toList();
+      final totals = await _crowdService.fetchBookedTotals(ids);
+      final capacity =
+          ferry.adultCap + ferry.childCap + ferry.bicycleCap + ferry.motorcycleCap;
+
+      final levels = <String, String>{};
+      for (final slot in slots) {
+        final booked = totals[slot.scheduleId] ?? 0;
+        levels[slot.scheduleId] = _crowdService.levelFor(booked, capacity);
+      }
+      return levels;
+    } catch (_) {
+      return {};
+    }
+  }
+
   Future<void> _loadSlot() async {
     setState(() {
       _loadingSlot = true;
@@ -146,15 +172,20 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
       filteredSlots.sort((a, b) => a.time.compareTo(b.time));
 
       final ferry = await _scheduleService.fetchFerry(defaultFerryId);
+      final slotCrowdLevels = await _loadSlotCrowdLevels(filteredSlots, ferry);
 
       ScheduleSlot? chosen;
       for (final slot in filteredSlots) {
-        if (slot.time.startsWith(selectedTime)) {
+        if (slot.time.startsWith(selectedTime) &&
+            slotCrowdLevels[slot.scheduleId] != 'Full') {
           chosen = slot;
           break;
         }
       }
-      chosen ??= filteredSlots.isEmpty ? null : filteredSlots.first;
+      chosen ??= filteredSlots
+          .where((s) => slotCrowdLevels[s.scheduleId] != 'Full')
+          .cast<ScheduleSlot?>()
+          .firstWhere((_) => true, orElse: () => null);
 
       final booked = chosen == null
           ? <String, int>{}
@@ -164,6 +195,7 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
       setState(() {
         _availableSlots = filteredSlots;
         _schedule = chosen;
+        _slotCrowdLevels = slotCrowdLevels;
         if (chosen != null) selectedTime = chosen.time.substring(0, 5);
         _ferry = ferry;
         _booked = booked;
@@ -180,6 +212,7 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
 
   Future<void> _selectSlot(ScheduleSlot slot) async {
     if (slot.scheduleId == _schedule?.scheduleId) return;
+    if (_slotCrowdLevels[slot.scheduleId] == 'Full') return;
     setState(() {
       _schedule = slot;
       selectedTime = slot.time.substring(0, 5);
@@ -483,21 +516,37 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
       children: _availableSlots.map((slot) {
         final label = slot.time.substring(0, 5);
         final selected = slot.scheduleId == _schedule?.scheduleId;
+        final isFull = _slotCrowdLevels[slot.scheduleId] == 'Full';
+
         return GestureDetector(
-          onTap: () => _selectSlot(slot),
+          onTap: isFull ? null : () => _selectSlot(slot),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
-              color: selected ? teal : ice,
+              color: isFull ? Colors.grey.shade300 : (selected ? teal : ice),
               borderRadius: BorderRadius.circular(20),
             ),
-            child: Text(
-              label,
-              style: TextStyle(
-                color: selected ? Colors.white : navy,
-                fontWeight: FontWeight.bold,
-                fontSize: 12.5,
-              ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: isFull ? Colors.grey.shade600 : (selected ? Colors.white : navy),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12.5,
+                  ),
+                ),
+                if (isFull)
+                  Text(
+                    'Full',
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+              ],
             ),
           ),
         );

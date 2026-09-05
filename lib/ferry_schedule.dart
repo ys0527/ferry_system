@@ -61,6 +61,7 @@ class _FerryScheduleState extends State<FerrySchedulePage> {
     setState(() {
       _resetExpandedPeriod();
       _scheduleFuture = _loadSchedule();
+      _crowdLevels.clear();
     });
   }
 
@@ -380,9 +381,11 @@ class _FerryScheduleState extends State<FerrySchedulePage> {
     final cancelled = entry.status == 'Cancelled';
     final displayTime = _formatTime(entry.time);
     final crowdLevel = _crowdLevels[entry.scheduleId];
+    final full = crowdLevel == 'Full';
+    final blocked = cancelled || full;
 
     return GestureDetector(
-      onTap: cancelled
+      onTap: blocked
           ? null
           : () {
         Navigator.push(
@@ -413,7 +416,8 @@ class _FerryScheduleState extends State<FerrySchedulePage> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'To $selectedDestination',
+                      'To $selectedDestination'
+                          '${_ferry != null ? ' \u00b7 Ferry ${_ferry!.ferryNum}' : ''}',
                       style: const TextStyle(fontSize: 12, color: Colors.black54),
                     ),
                   ),
