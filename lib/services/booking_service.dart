@@ -34,12 +34,6 @@ class BookingService {
   final _scheduleService = ScheduleService();
   final _rewardService = RewardService();
 
-  // Same pooling rule as booking_payment.dart's ticket-selector UI: Adult
-  // and Child share one combined capacity (they're just two price tiers
-  // for the same physical seat), so this check must match that logic --
-  // otherwise a selection the UI allowed could still be rejected here.
-  // Bicycle/Motorcycle stay independent, since they likely occupy
-  // different amounts of deck space.
   static const List<String> _pooledKeys = ['adult', 'child'];
 
   Future<String> createPendingBooking({
@@ -65,7 +59,7 @@ class BookingService {
 
     for (final t in ticketTypes) {
       final key = t['key'] as String;
-      if (_pooledKeys.contains(key)) continue; // already checked as a pool above
+      if (_pooledKeys.contains(key)) continue;
       final requested = counts[key] ?? 0;
       if (requested == 0) continue;
       final capacity = ferry.capacityFor(key);

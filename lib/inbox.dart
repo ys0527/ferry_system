@@ -66,7 +66,7 @@ class _InboxState extends State<InboxPage> {
         }
       });
     } catch (_) {
-      // Not critical -- leave it showing as unread if this fails.
+
     }
   }
 

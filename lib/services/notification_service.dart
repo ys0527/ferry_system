@@ -13,7 +13,6 @@ class NotificationService {
     if (_channel != null) return;
 
     final userId = await currentUserId();
-    // ignore: avoid_print
     print('Starting notification listener for user $userId');
     await LocalNotificationService.instance.init();
 
@@ -29,7 +28,6 @@ class NotificationService {
         value: userId,
       ),
       callback: (payload) {
-        // ignore: avoid_print
         print('Realtime insert received: ${payload.newRecord}');
         final row = payload.newRecord;
         LocalNotificationService.instance.show(
@@ -39,7 +37,6 @@ class NotificationService {
       },
     )
         .subscribe((status, error) {
-      // ignore: avoid_print
       print('Realtime channel status: $status, error: $error');
     });
   }

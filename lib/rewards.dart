@@ -90,7 +90,6 @@ class _RewardsPageState extends State<RewardsPage> {
         }
       }
 
-// All active rewards remain available for repeated redemption.
       final availableRewards = rewards
           .where(
             (reward) => reward['is_active'] == true,

@@ -99,7 +99,6 @@ class _AccountPageState extends State<AccountPage> {
       ),
     );
 
-    // Reload the latest name and profile picture after returning.
     await _loadUserData();
   }
 

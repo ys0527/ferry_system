@@ -59,7 +59,6 @@ class _MyAppState extends State<MyApp> {
 
   Widget _initialPage() {
     final parameters = Uri.base.queryParameters;
-    //if (parameters['reset'] == 'true') return const ResetPasswordPage();
     if (parameters['confirmed'] == 'true') return const EmailConfirmedPage();
     if (parameters['emailChanged'] == 'true') {
       return const EmailChangedPage();

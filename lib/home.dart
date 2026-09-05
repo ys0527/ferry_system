@@ -123,11 +123,6 @@ class _HomeState extends State<HomePage> {
       }
     }
 
-    // Kept in its own try/catch so a schedule-fetch problem never blocks
-    // the rest of the home screen from loading. Retries once, since a
-    // transient cold-start network hiccup (common right after app launch,
-    // especially on emulators) can fail once and then succeed immediately
-    // on a second try.
     _NextSailing? nextSailing;
     try {
       nextSailing = await _findNextSailing();
@@ -148,8 +143,6 @@ class _HomeState extends State<HomePage> {
       }
     }
 
-    // Crowd level is supplementary — kept in its own try/catch so a
-    // failure here never blocks the rest of the card from showing.
     String? crowdLevel;
     if (nextSailing != null) {
       try {

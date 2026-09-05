@@ -53,8 +53,6 @@ class _WeatherSailingPageState extends State<WeatherSailingPage> {
     }
   }
 
-  // Best-effort and non-blocking -- a failed notification insert shouldn't
-  // affect the weather screen itself, which already has the data it needs.
   Future<void> _sendAdvisoryNotification(SailingConditions c) async {
     try {
       final title = _statusLabel(c.status);
@@ -63,7 +61,7 @@ class _WeatherSailingPageState extends State<WeatherSailingPage> {
           : 'Wave height ${c.marine.waveHeightM.toStringAsFixed(1)}m, wind ${c.marine.windSpeedKmh.toStringAsFixed(0)}km/h on the Georgetown–Butterworth crossing.';
       await NotificationService().notifyWeatherAdvisoryIfNew(title: title, body: body);
     } catch (_) {
-      // Ignore -- not critical to the screen's own function.
+
     }
   }
 

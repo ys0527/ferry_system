@@ -62,13 +62,6 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
     {'label': 'Two-Wheeler', 'keys': ['bicycle', 'motorcycle'], 'unit': 'space'},
   ];
 
-  // Only 'Passenger' (adult/child) is pooled -- they're just two price
-  // tiers for the same physical seat, so unused Child capacity can
-  // legitimately be sold as Adult and vice versa. Two-Wheeler (bicycle/
-  // motorcycle) stays as separate strict caps, since a motorcycle likely
-  // takes more deck space than a bicycle -- pooling them 1:1 could
-  // overpromise space if the capacity numbers represent physical area
-  // rather than a simple headcount.
   Map<String, dynamic>? _pooledGroupFor(String key) {
     for (final group in _crowdGroups) {
       if (group['label'] == 'Passenger' && (group['keys'] as List).contains(key)) {

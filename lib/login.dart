@@ -31,7 +31,6 @@ class _LoginState extends State<LoginPage> {
     super.dispose();
   }
 
-  //
   Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -69,7 +68,6 @@ class _LoginState extends State<LoginPage> {
 
       if (!mounted) return;
 
-      // Show only during the first login before completing the profile.
       if (authUser.emailConfirmedAt != null && profile == null) {
         await showDialog<void>(
           context: context,
@@ -133,7 +131,6 @@ class _LoginState extends State<LoginPage> {
     }
   }
 
-  //Forgot Password Function
   Future<void> _handleForgotPassword() async {
     final email = _emailController.text.trim();
 

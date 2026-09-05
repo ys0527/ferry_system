@@ -33,7 +33,6 @@ class _RegisterState extends State<RegisterPage> {
     super.dispose();
   }
 
-  //debug ver
   Future<void> _handleRegister() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
@@ -62,7 +61,6 @@ class _RegisterState extends State<RegisterPage> {
       final response = await Supabase.instance.client.auth.signUp(
         email: email,
         password: _passwordController.text,
-        //emailRedirectTo: '${Uri.base.origin}/?confirmed=true',
       );
 
       if (response.user == null) {

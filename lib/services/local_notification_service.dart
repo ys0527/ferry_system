@@ -8,10 +8,6 @@ class LocalNotificationService {
   final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   bool _initialized = false;
 
-  // A plain counter instead of a time-based id -- two notifications fired
-  // back-to-back (e.g. Booking Confirmed then Reward Points Earned) can
-  // land within the same second, which previously gave them the same id
-  // and made the second one silently overwrite the first in the tray.
   int _nextId = DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
   static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
@@ -32,8 +28,6 @@ class LocalNotificationService {
     final androidPlugin = _plugin
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
     await androidPlugin?.createNotificationChannel(_channel);
-    // Required on Android 13+ (API 33+) -- without this, notifications are
-    // silently suppressed even though the code runs without error.
     await androidPlugin?.requestNotificationsPermission();
 
     _initialized = true;
@@ -52,8 +46,6 @@ class LocalNotificationService {
       ),
     );
 
-    // A unique id per call keeps each notification distinct instead of
-    // overwriting the previous one in the tray.
     await _plugin.show(
       id: _nextId++,
       title: title,

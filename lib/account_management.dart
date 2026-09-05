@@ -71,7 +71,6 @@ class _AccountManagementState extends State<AccountManagementPage> {
 
       if (userData == null) throw Exception('User profile was not found');
 
-      // Only a confirmed Supabase Auth email is copied into public.users.
       final authenticatedEmail = authUser.email ?? userData['email'] ?? '';
       if (authenticatedEmail.isNotEmpty &&
           userData['email'] != authenticatedEmail) {
@@ -230,14 +229,12 @@ class _AccountManagementState extends State<AccountManagementPage> {
             'date_of_birth': _selectedDateOfBirth?.toIso8601String().split('T').first,
           },
         ),
-        //emailRedirectTo: '${Uri.base.origin}/?emailChanged=true',
       );
 
       final newProfileUrl = await _uploadProfileImage(authUser.id);
 
       await Supabase.instance.client.from('users').update({
         'name': newName,
-        //'email': confirmedEmail,
         'phone_num': newPhone,
         'gender': _selectedGender,
         'date_of_birth': _selectedDateOfBirth?.toIso8601String().split('T').first,

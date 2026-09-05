@@ -54,9 +54,6 @@ class _OverallReviewsState extends State<OverallReviewsPage> {
       _error = null;
     });
     try {
-      // There's no `route` column on `booking` -- it's built from
-      // schedule.departure + schedule.destination, so this needs the
-      // nested embed to reconstruct it for display.
       final response = await supabase
           .from('review')
           .select('*, booking!inner(schedule!inner(departure, destination))')
@@ -77,9 +74,6 @@ class _OverallReviewsState extends State<OverallReviewsPage> {
       final reviewIds = rows.map((r) => r['review_id'].toString()).toList();
 
       final results = await Future.wait([
-        // Same reasoning as reviews_ratings.dart -- a narrow RPC instead
-        // of a broadened `users` SELECT policy, so email/phone_num stay
-        // private while names are still shown.
         supabase.rpc('get_display_names', params: {'uids': userIds}),
         supabase.from('review_photo').select('review_id, file_name').inFilter('review_id', reviewIds),
       ]);

@@ -70,8 +70,6 @@ class PaymentService {
     await _awardPoints(userId, rewardPointsFor(amount));
     await _finalizeVoucher(bookingId);
 
-    // Best-effort: a failed notification shouldn't undo a successful
-    // payment that's already been recorded above.
     try {
       final notificationService = NotificationService();
       await notificationService.notifyBookingConfirmed(userId: userId, reference: reference);
@@ -80,7 +78,7 @@ class PaymentService {
         await notificationService.notifyPointsEarned(userId: userId, points: points);
       }
     } catch (_) {
-      // Ignore -- the booking and points are already committed.
+
     }
 
     return reference;
