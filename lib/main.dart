@@ -12,7 +12,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   Stripe.publishableKey =
   'pk_test_51UATPFFWH2R2KmW9YBGLxfmMpnJWyvcV3zVMget5tHVcctlAnhA1MGmEnydjIk2hTDiCsHi3o8dtQaO4bFuHJBUe00baDR3Ke8';
-  await Supabase.initialize(url: supabaseUrl, anonKey: supabaseKey);
+  await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
   runApp(const MyApp());
 }
 
