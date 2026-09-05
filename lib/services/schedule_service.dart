@@ -15,11 +15,22 @@ class ScheduleService {
     return Ferry.fromMap(row);
   }
 
+  Future<Map<String, Ferry>> fetchFerries(Iterable<String> ferryIds) async {
+    final ids = ferryIds.toSet().toList();
+    if (ids.isEmpty) return {};
+
+    final rows = await _client.from('ferry').select().inFilter('ferry_id', ids);
+
+    return {
+      for (final row in (rows as List))
+        (row as Map<String, dynamic>)['ferry_id'] as String: Ferry.fromMap(row),
+    };
+  }
+
   Future<List<ScheduleSlot>> fetchSchedules({
     required String departure,
     required String destination,
     required DateTime date,
-    required String ferryId,
   }) async {
     final dateStr =
         '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';

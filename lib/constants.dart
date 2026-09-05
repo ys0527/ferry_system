@@ -1,5 +1,3 @@
-const String defaultFerryId = 'F0001';
-
 const ticketTypeLabels = {
   'adult': 'Adult',
   'child': 'Child',

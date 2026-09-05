@@ -117,7 +117,6 @@ class BookingService {
     try {
       await _rewardService.releaseVoucher(bookingId);
     } catch (e) {
-      // Best-effort: don't block the seat/booking release over this.
     }
     await _client.from('ticket').delete().eq('booking_id', bookingId);
     await _client

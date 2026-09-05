@@ -83,8 +83,11 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
   String? _slotError;
   List<ScheduleSlot> _availableSlots = const [];
   ScheduleSlot? _schedule;
-  Ferry? _ferry;
+  Map<String, Ferry> _ferriesById = {};
   Map<String, int> _booked = {};
+
+  Ferry? get _ferry =>
+      _schedule == null ? null : _ferriesById[_schedule!.ferryId];
 
   Map<String, String> _slotCrowdLevels = {};
 
@@ -150,17 +153,19 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
 
   Future<Map<String, String>> _loadSlotCrowdLevels(
       List<ScheduleSlot> slots,
-      Ferry ferry,
+      Map<String, Ferry> ferriesById,
       ) async {
     if (slots.isEmpty) return {};
     try {
       final ids = slots.map((s) => s.scheduleId).toList();
       final totals = await _crowdService.fetchBookedTotals(ids);
-      final capacity =
-          ferry.adultCap + ferry.childCap + ferry.bicycleCap + ferry.motorcycleCap;
 
       final levels = <String, String>{};
       for (final slot in slots) {
+        final ferry = ferriesById[slot.ferryId];
+        if (ferry == null) continue;
+        final capacity =
+            ferry.adultCap + ferry.childCap + ferry.bicycleCap + ferry.motorcycleCap;
         final booked = totals[slot.scheduleId] ?? 0;
         levels[slot.scheduleId] = _crowdService.levelFor(booked, capacity);
       }
@@ -183,15 +188,17 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
         departure: parts[0],
         destination: parts[1],
         date: selectedDate,
-        ferryId: defaultFerryId,
       );
 
       final filteredSlots = _applyPastFilter(rawSlots);
 
       filteredSlots.sort((a, b) => a.time.compareTo(b.time));
 
-      final ferry = await _scheduleService.fetchFerry(defaultFerryId);
-      final slotCrowdLevels = await _loadSlotCrowdLevels(filteredSlots, ferry);
+      final ferriesById = await _scheduleService.fetchFerries(
+        filteredSlots.map((s) => s.ferryId),
+      );
+      final slotCrowdLevels =
+          await _loadSlotCrowdLevels(filteredSlots, ferriesById);
 
       ScheduleSlot? chosen;
       for (final slot in filteredSlots) {
@@ -216,7 +223,7 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
         _schedule = chosen;
         _slotCrowdLevels = slotCrowdLevels;
         if (chosen != null) selectedTime = chosen.time.substring(0, 5);
-        _ferry = ferry;
+        _ferriesById = ferriesById;
         _booked = booked;
         _loadingSlot = false;
       });
@@ -281,7 +288,7 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
     try {
       bookingId = await _bookingService.createPendingBooking(
         scheduleId: _schedule!.scheduleId,
-        ferryId: defaultFerryId,
+        ferryId: _schedule!.ferryId,
         ticketTypes: ticketTypes,
         counts: counts,
         fare: fare,
@@ -321,7 +328,6 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
         try {
           await _bookingService.cancelPendingBooking(bookingId);
         } catch (_) {
-          // Best-effort cleanup; still show the original error below.
         }
       }
       if (!mounted) return;

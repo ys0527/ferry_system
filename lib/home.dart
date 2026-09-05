@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'constants.dart';
 import 'models/schedule.dart';
 import 'services/crowd_density_service.dart';
 import 'services/schedule_service.dart';
@@ -154,7 +153,9 @@ class _HomeState extends State<HomePage> {
     String? crowdLevel;
     if (nextSailing != null) {
       try {
-        final ferry = await _scheduleService.fetchFerry(defaultFerryId);
+        final ferry = await _scheduleService.fetchFerry(
+          nextSailing.slot.ferryId,
+        );
         final totals = await _crowdService.fetchBookedTotals(
           [nextSailing.slot.scheduleId],
         );
@@ -196,7 +197,6 @@ class _HomeState extends State<HomePage> {
         departure: route[0],
         destination: route[1],
         date: today,
-        ferryId: defaultFerryId,
       );
 
       for (final slot in slots) {

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'booking_payment.dart';
-import 'constants.dart';
 import 'models/ferry.dart';
 import 'models/schedule.dart';
 import 'services/crowd_density_service.dart';
@@ -31,7 +30,8 @@ class _FerryScheduleState extends State<FerrySchedulePage> {
   late DateTime selectedDate = availableDates.first;
 
   late Future<List<ScheduleSlot>> _scheduleFuture;
-  Ferry? _ferry;
+
+  final Map<String, Ferry> _ferriesById = {};
 
   String? _expandedPeriod;
 
@@ -48,13 +48,17 @@ class _FerryScheduleState extends State<FerrySchedulePage> {
   String get _direction => '$_departure \u2192 $selectedDestination';
 
   Future<List<ScheduleSlot>> _loadSchedule() async {
-    _ferry ??= await _scheduleService.fetchFerry(defaultFerryId);
-    return _scheduleService.fetchSchedules(
+    final slots = await _scheduleService.fetchSchedules(
       departure: _departure,
       destination: selectedDestination,
       date: selectedDate,
-      ferryId: defaultFerryId,
     );
+
+    final unknownIds =
+        slots.map((s) => s.ferryId).where((id) => !_ferriesById.containsKey(id));
+    _ferriesById.addAll(await _scheduleService.fetchFerries(unknownIds));
+
+    return slots;
   }
 
   void _refreshSchedule() {
@@ -66,26 +70,28 @@ class _FerryScheduleState extends State<FerrySchedulePage> {
   }
 
   Future<void> _loadCrowdLevelsFor(List<ScheduleSlot> entries) async {
-    if (_ferry == null) return;
-
-    final missingIds = entries
-        .map((e) => e.scheduleId)
-        .where((id) => !_crowdLevels.containsKey(id))
+    final missing = entries
+        .where((e) => !_crowdLevels.containsKey(e.scheduleId))
         .toList();
-    if (missingIds.isEmpty) return;
+    if (missing.isEmpty) return;
 
     try {
-      final totals = await _crowdService.fetchBookedTotals(missingIds);
-      final capacity = _ferry!.adultCap +
-          _ferry!.childCap +
-          _ferry!.bicycleCap +
-          _ferry!.motorcycleCap;
+      final totals = await _crowdService.fetchBookedTotals(
+        missing.map((e) => e.scheduleId).toList(),
+      );
 
       if (!mounted) return;
       setState(() {
-        for (final id in missingIds) {
-          final booked = totals[id] ?? 0;
-          _crowdLevels[id] = _crowdService.levelFor(booked, capacity);
+        for (final entry in missing) {
+          final ferry = _ferriesById[entry.ferryId];
+          if (ferry == null) continue;
+          final capacity = ferry.adultCap +
+              ferry.childCap +
+              ferry.bicycleCap +
+              ferry.motorcycleCap;
+          final booked = totals[entry.scheduleId] ?? 0;
+          _crowdLevels[entry.scheduleId] =
+              _crowdService.levelFor(booked, capacity);
         }
       });
     } catch (_) {
