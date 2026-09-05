@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'constants.dart';
 import 'models/ferry.dart';
-import 'models/qr_ticket_data.dart';
 import 'models/schedule.dart';
 import 'models/voucher.dart';
 import 'payment.dart';
-import 'qr_ticket.dart';
 import 'rewards.dart';
 import 'services/booking_service.dart';
 import 'services/crowd_density_service.dart';
@@ -263,8 +261,9 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
   Future<void> _confirmAndPay() async {
     if (_schedule == null) return;
     setState(() => _confirming = true);
+    String? bookingId;
     try {
-      final bookingId = await _bookingService.createPendingBooking(
+      bookingId = await _bookingService.createPendingBooking(
         scheduleId: _schedule!.scheduleId,
         ferryId: defaultFerryId,
         ticketTypes: ticketTypes,
@@ -273,7 +272,6 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
       );
 
       var payableFare = fare;
-      String? freeTicketReference;
 
       if (_selectedVoucher != null) {
         final result = await _rewardService.applyVoucher(
@@ -281,46 +279,35 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
           bookingId: bookingId,
         );
         payableFare = result.newTotal;
-        freeTicketReference = result.reference;
       }
 
       if (!mounted) return;
       setState(() => _confirming = false);
 
-      if (payableFare <= 0) {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(
-            builder: (context) => QrTicketPage(
-              initialData: QrTicketData(
-                reference: freeTicketReference!,
-                route: direction,
-                date: '${_weekdayLabel(selectedDate)}, ${selectedDate.day}/${selectedDate.month}',
-                time: selectedTime,
-                ticketSummary: ticketSummary,
-                fare: 0,
-              ),
-            ),
-          ),
-              (route) => route.isFirst,
-        );
-        return;
-      }
-
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => PaymentPage(
-            bookingId: bookingId,
+            bookingId: bookingId!,
             route: direction,
             date: '${_weekdayLabel(selectedDate)}, ${selectedDate.day}/${selectedDate.month}',
             time: selectedTime,
             ticketSummary: ticketSummary,
             fare: payableFare,
+            sailingAt: _entryDateTime(_schedule!),
+            voucherTitle: _selectedVoucher?.title,
+            discountAmount: _selectedVoucher != null ? fare - payableFare : null,
           ),
         ),
       );
     } catch (e) {
+      if (bookingId != null) {
+        try {
+          await _bookingService.cancelPendingBooking(bookingId);
+        } catch (_) {
+          // Best-effort cleanup; still show the original error below.
+        }
+      }
       if (!mounted) return;
       setState(() => _confirming = false);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -596,9 +583,7 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
   }
   Widget _buildVoucherTile(Voucher v) {
     final selected = v.redemptionId == _selectedVoucher?.redemptionId;
-    final effect = v.isFree
-        ? 'Whole booking free'
-        : '− RM ${(v.discountAmount ?? 0).toStringAsFixed(2)} off';
+    final effect = '− RM ${(v.discountAmount ?? 0).toStringAsFixed(2)} off';
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -614,7 +599,7 @@ class _BookingPaymentState extends State<BookingPaymentPage> {
           child: Row(
             children: [
               Icon(
-                v.isFree ? Icons.confirmation_number : Icons.local_offer,
+                Icons.local_offer,
                 size: 20,
                 color: selected ? Colors.white : navy,
               ),

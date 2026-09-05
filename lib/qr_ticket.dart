@@ -1,3 +1,4 @@
+import 'package:add_2_calendar/add_2_calendar.dart';
 import 'package:flutter/material.dart';
 import 'models/qr_ticket_data.dart';
 import 'services/booking_service.dart';
@@ -50,6 +51,38 @@ class _QrTicketPageState extends State<QrTicketPage> {
     }
   }
 
+  Future<void> _addToCalendar(QrTicketData data) async {
+    final description = StringBuffer()
+      ..writeln('Booking ${data.reference}')
+      ..writeln(data.ticketSummary)
+      ..writeln('Total RM ${data.fare.toStringAsFixed(2)}');
+
+    final event = Event(
+      title: 'Ferry: ${data.route}',
+      location: data.route.split('→').first.trim(),
+      description: description.toString().trimRight(),
+      startDate: data.sailingAt,
+      endDate: data.sailingAt.add(const Duration(minutes: 30)),
+    );
+
+    bool opened;
+    try {
+      opened = await Add2Calendar.addEvent2Cal(event);
+    } catch (e) {
+      opened = false;
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          opened
+              ? 'Opened your calendar app.'
+              : 'No calendar app could be opened on this device.',
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -100,6 +133,23 @@ class _QrTicketPageState extends State<QrTicketPage> {
           subtitle: '${data.date} · ${data.time} · ${data.ticketSummary}',
           reference: data.reference,
           fare: data.fare,
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () => _addToCalendar(data),
+            icon: const Icon(Icons.event_available, size: 18),
+            label: const Text('Add to calendar'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: navy,
+              side: const BorderSide(color: navy),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
         ),
         const SizedBox(height: 16),
         Container(

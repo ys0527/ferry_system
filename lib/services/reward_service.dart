@@ -63,4 +63,12 @@ class RewardService {
       reference: row['reference'] as String,
     );
   }
+
+  Future<void> finalizeVoucher(String bookingId) async {
+    await _client.rpc('finalize_voucher', params: {'p_booking_id': bookingId});
+  }
+
+  Future<void> releaseVoucher(String bookingId) async {
+    await _client.rpc('release_voucher', params: {'p_booking_id': bookingId});
+  }
 }

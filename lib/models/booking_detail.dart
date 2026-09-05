@@ -59,6 +59,8 @@ class BookingDetail {
     required this.total,
     required this.bookedAt,
     this.payment,
+    this.discountAmount,
+    this.voucherTitle,
   });
 
   final String bookingId;
@@ -73,6 +75,8 @@ class BookingDetail {
   final double total;
   final DateTime bookedAt;
   final PaymentRecord? payment;
+  final double? discountAmount;
+  final String? voucherTitle;
 
   bool get isPast => sailingAt.isBefore(DateTime.now());
 
@@ -82,13 +86,19 @@ class BookingDetail {
       ? 'No tickets'
       : lines.map((l) => '${l.quantity} ${l.type}').join(', ');
 
-  factory BookingDetail.fromMap(Map<String, dynamic> map) {
+  factory BookingDetail.fromMap(
+    Map<String, dynamic> map, {
+    double? discountAmount,
+    String? voucherTitle,
+  }) {
     final schedule = map['schedule'] as Map<String, dynamic>;
     final ferry = schedule['ferry'] as Map<String, dynamic>?;
     final payments =
         (map['payment'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
 
     return BookingDetail(
+      discountAmount: discountAmount,
+      voucherTitle: voucherTitle,
       bookingId: map['booking_id'] as String,
       reference: map['reference'] as String,
       status: map['status'] as String,

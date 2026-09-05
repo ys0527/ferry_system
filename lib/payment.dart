@@ -14,6 +14,9 @@ class PaymentPage extends StatefulWidget {
     required this.time,
     required this.ticketSummary,
     required this.fare,
+    required this.sailingAt,
+    this.voucherTitle,
+    this.discountAmount,
     super.key,
   });
 
@@ -23,6 +26,9 @@ class PaymentPage extends StatefulWidget {
   final String time;
   final String ticketSummary;
   final double fare;
+  final DateTime sailingAt;
+  final String? voucherTitle;
+  final double? discountAmount;
 
   @override
   State<PaymentPage> createState() => _PaymentState();
@@ -40,11 +46,40 @@ class _PaymentState extends State<PaymentPage> {
 
   bool _sheetOpen = false;
 
-  bool _paymentSucceeded = false;
+  bool _cancelling = false;
 
-  void _cancelAbandonedBooking() {
-    if (_paymentSucceeded) return;
-    _bookingService.cancelBooking(widget.bookingId);
+  Future<void> _handleBackAttempt() async {
+    if (_isPaying || _sheetOpen || _cancelling) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Cancel this booking?'),
+        content: const Text(
+          'Going back will cancel this booking and release your seat(s).',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Stay'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Cancel Booking'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _cancelling = true);
+    try {
+      await _bookingService.cancelPendingBooking(widget.bookingId);
+    } catch (_) {
+    }
+    if (context.mounted) Navigator.of(context).pop();
   }
 
   Future<void> _payWithPaymentSheet() async {
@@ -90,7 +125,6 @@ class _PaymentState extends State<PaymentPage> {
       await _showPointsEarnedDialog();
 
       if (!mounted) return;
-      _paymentSucceeded = true;
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
@@ -102,6 +136,7 @@ class _PaymentState extends State<PaymentPage> {
               time: widget.time,
               ticketSummary: widget.ticketSummary,
               fare: widget.fare,
+              sailingAt: widget.sailingAt,
             ),
           ),
         ),
@@ -167,11 +202,10 @@ class _PaymentState extends State<PaymentPage> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: true,
-      onPopInvokedWithResult: (didPop, result) {
-        if (didPop) {
-          _cancelAbandonedBooking();
-        }
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        await _handleBackAttempt();
       },
       child: Scaffold(
         backgroundColor: Colors.white,
@@ -195,6 +229,11 @@ class _PaymentState extends State<PaymentPage> {
                   _summaryRow('Date', widget.date),
                   _summaryRow('Time', widget.time),
                   _summaryRow('Tickets', widget.ticketSummary),
+                  if (widget.discountAmount != null && widget.discountAmount! > 0)
+                    _summaryRow(
+                      widget.voucherTitle ?? 'Voucher',
+                      '− RM ${widget.discountAmount!.toStringAsFixed(2)}',
+                    ),
                 ],
               ),
             ),

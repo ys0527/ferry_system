@@ -5,6 +5,7 @@ import '../models/booking_history_entry.dart';
 import '../models/qr_ticket_data.dart';
 import '../supabase_config.dart';
 import 'current_user_service.dart';
+import 'reward_service.dart';
 import 'schedule_service.dart';
 
 String _generateReference(DateTime now) {
@@ -31,6 +32,7 @@ class BookingCapacityException implements Exception {
 class BookingService {
   final _client = supabase;
   final _scheduleService = ScheduleService();
+  final _rewardService = RewardService();
 
   Future<String> createPendingBooking({
     required String scheduleId,
@@ -91,10 +93,16 @@ class BookingService {
     return bookingId;
   }
 
-  Future<void> cancelBooking(String bookingId) async {
+  Future<void> cancelPendingBooking(String bookingId) async {
+    try {
+      await _rewardService.releaseVoucher(bookingId);
+    } catch (e) {
+      // Best-effort: don't block the seat/booking release over this.
+    }
+    await _client.from('ticket').delete().eq('booking_id', bookingId);
     await _client
         .from('booking')
-        .update({'status': 'Cancelled'})
+        .delete()
         .eq('booking_id', bookingId)
         .eq('status', 'Pending');
   }
@@ -123,7 +131,35 @@ class BookingService {
         .eq('booking_id', bookingId)
         .single();
 
-    return BookingDetail.fromMap(row);
+    final redemptionRows = List<Map<String, dynamic>>.from(
+      await _client
+          .from('redemption')
+          .select('reward_id')
+          .eq('booking_id', bookingId)
+          .eq('type', 'Used')
+          .limit(1),
+    );
+
+    double? discountAmount;
+    String? voucherTitle;
+    if (redemptionRows.isNotEmpty) {
+      final rewardId = redemptionRows.first['reward_id'] as String?;
+      if (rewardId != null) {
+        final rewardRow = await _client
+            .from('reward')
+            .select('title, discount_amount')
+            .eq('reward_id', rewardId)
+            .maybeSingle();
+        voucherTitle = rewardRow?['title'] as String?;
+        discountAmount = (rewardRow?['discount_amount'] as num?)?.toDouble();
+      }
+    }
+
+    return BookingDetail.fromMap(
+      row,
+      discountAmount: discountAmount,
+      voucherTitle: voucherTitle,
+    );
   }
 
   Future<QrTicketData?> fetchLatestConfirmedTicket(String userId) async {
@@ -161,6 +197,7 @@ class BookingService {
           ? 'No tickets'
           : summaryParts.join(', '),
       fare: (row['total'] as num).toDouble(),
+      sailingAt: DateTime.parse('${schedule['date']} $timeStr'),
     );
   }
 }

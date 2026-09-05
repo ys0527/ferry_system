@@ -223,6 +223,11 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                       caption: 'RM ${l.unitPrice.toStringAsFixed(2)} each',
                     ),
                   ),
+                  if (d.discountAmount != null && d.discountAmount! > 0)
+                    _row(
+                      d.voucherTitle ?? 'Voucher',
+                      '− RM ${d.discountAmount!.toStringAsFixed(2)}',
+                    ),
                   _row('Total', 'RM ${d.total.toStringAsFixed(2)}', bold: true),
                 ],
               ),

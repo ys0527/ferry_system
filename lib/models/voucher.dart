@@ -11,12 +11,9 @@ class Voucher {
   final String rewardType;
   final double? discountAmount;
 
-  bool get isFree => rewardType == 'Free Ticket';
-
   double previewFare(double fare) {
-    if (isFree) return 0;
-    final discounted = fare - (discountAmount ?? 0);
-    return discounted.clamp(0, fare);
+    if (fare <= 0) return 0;
+    return (fare - (discountAmount ?? 0)).clamp(2.0, fare);
   }
 
   factory Voucher.fromRows({
